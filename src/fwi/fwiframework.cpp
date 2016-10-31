@@ -140,16 +140,61 @@ void calgradient(const Damp4t10d &fmMethod,
     fmMethod.stepForward(&sp0[0], &sp1[0]);
     //printf("it = %d, forward 2\n", it);
     std::swap(sp1, sp0);
-    fmMethod.writeBndry(&bndr[0], &sp0[0], it);
+    //fmMethod.writeBndry(&bndr[0], &sp0[0], it); -test
+		const int check_step = 5;
+    if ((it > 0) && (it != (nt - 1)) && !(it % check_step)) {
+      char check_file_name1[64];
+      char check_file_name2[64];
+      sprintf(check_file_name1, "./check_time_%d_1.su", it);
+      sprintf(check_file_name2, "./check_time_%d_2.su", it);
+			FILE *f1 = fopen(check_file_name1, "wb");
+			FILE *f2 = fopen(check_file_name2, "wb");
+			fwrite(&sp0[0], sizeof(float), nx * nz, f1);
+			fwrite(&sp1[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+    }
   }
+	char check_file_name1[64] = "./check_time_last_1.su";
+	char check_file_name2[64] = "./check_time_last_2.su";
+	FILE *f1 = fopen(check_file_name1, "wb");
+	FILE *f2 = fopen(check_file_name2, "wb");
+	fwrite(&sp0[0], sizeof(float), nx * nz, f1);
+	fwrite(&sp1[0], sizeof(float), nx * nz, f2);
+	fclose(f1);
+	fclose(f2);
 
   for(int it = nt - 1; it >= 0 ; it--) {
-    fmMethod.readBndry(&bndr[0], &sp0[0], it);
-    std::swap(sp0, sp1);
-    //printf("it = %d, back 1\n", it);
+    //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
+		const int check_step = 5;
+		if(it == nt - 1)
+		{
+			char check_file_name1[64] = "./check_time_last_1.su";
+			char check_file_name2[64] = "./check_time_last_2.su";
+			FILE *f1 = fopen(check_file_name1, "rb");
+			FILE *f2 = fopen(check_file_name2, "rb");
+			fread(&sp1[0], sizeof(float), nx * nz, f1);
+			fread(&sp0[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+		}
+		else if ((check_step > 0) && !(it % check_step) && (it != 0)) {
+			char check_file_name1[64];
+			char check_file_name2[64];
+			sprintf(check_file_name1, "./check_time_%d_1.su", it);
+			sprintf(check_file_name2, "./check_time_%d_2.su", it);
+			FILE *f1 = fopen(check_file_name1, "rb");
+			FILE *f2 = fopen(check_file_name2, "rb");
+			fread(&sp1[0], sizeof(float), nx * nz, f1);
+			fread(&sp0[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+		}
+
+    //std::swap(sp0, sp1); -test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    //printf("it = %d, back 2\n", it);
     //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    std::swap(sp0, sp1);	//-test
     fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
 
     /**
@@ -268,35 +313,35 @@ void FwiFramework::epoch(int iter) {
 
 void FwiFramework::epoch(int iter) {
 	std::vector<float> g2(nx * nz, 0);
-	std::vector<float> encsrc = wlt;
+	std::vector<float> encsrc(wlt);
 	std::vector<float> encobs(ng * nt, 0);
 	float obj1 = 0.0f;
 	for(int is = 0 ; is < ns ; is ++) {
 		INFO() << format("calculate gradient, shot id: %d") % is;
 		memcpy(&encobs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 
+		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.begin() + ng * nt, 0.0f);
+		INFO() << encsrc[0] << " " << encsrc[132];
+		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
+
 		std::vector<float> dcal(nt * ng, 0);
 		fmMethod.FwiForwardModeling(encsrc, dcal, is);
+
+		std::vector<float> trans_dcal(ng * nt, 0.0f);
+		matrix_transpose(&dcal[0], &trans_dcal[0], ng, nt);
+
+		FILE *f_dcal = fopen("dcal.bin", "wb");
+		fwrite(&trans_dcal[0], sizeof(float), ng * nt, f_dcal);
+		fclose(f_dcal);
+
+		INFO() << dcal[0];
+		INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.begin() + ng * nt, 0.0f);
+
 		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
 		fmMethod.fwiRemoveDirectArrival(&dcal[0], is);
-		/*
-		if(is == 0)
-		{
-			std::vector<float> trans(nt * ng, 0);
-			matrix_transpose(&dcal[0], &trans[0], ng, nt);
-			FILE *f = fopen("shot0.bin","wb");
-			fwrite(&trans[0], sizeof(float), nt * ng, f);
-			fclose(f);
-		}
-		if(is == 1)
-		{
-			std::vector<float> trans(nt * ng, 0);
-			matrix_transpose(&dcal[0], &trans[0], ng, nt);
-			FILE *f = fopen("shot1.bin","wb");
-			fwrite(&trans[0], sizeof(float), nt * ng, f);
-			fclose(f);
-		}
-		*/
+
+		INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.begin() + ng * nt, 0.0f);
+		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.begin() + ng * nt, 0.0f);
 
 		std::vector<float> vsrc(nt * ng, 0);
 		vectorMinus(encobs, dcal, vsrc);
@@ -305,6 +350,8 @@ void FwiFramework::epoch(int iter) {
 		DEBUG() << format("obj: %e") % obj1;
 
 		transVsrc(vsrc, nt, ng);
+
+		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.begin() + ng * nt, 0.0f);
 
 		std::vector<float> g1(nx * nz, 0);
 		calgradient(fmMethod, encsrc, vsrc, g1, nt, dt, is);

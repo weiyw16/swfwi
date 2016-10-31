@@ -9,6 +9,11 @@ extern "C" {
 #include <vector>
 #include <cstdlib>
 #include <cmath>
+#include <algorithm>
+#include <iterator>
+#include <numeric>
+#include <cstdlib>
+#include <functional>
 
 #include "logger.h"
 #include "shot-position.h"
@@ -178,6 +183,7 @@ int main(int argc, char *argv[]) {
 
   std::vector<float> wlt(nt);
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
+	INFO() << "sum encsrc: " << std::accumulate(wlt.begin(), wlt.begin() + nt, 0.0f);
 
   std::vector<float> dobs(ns * nt * ng);     /* all observed data */
   ShotDataReader::serialRead(params.shots, &dobs[0], ns, nt, ng);
