@@ -36,8 +36,8 @@ elif compiler_set == 'swintel':#{{{
   link_flags      = ['-O1']
 #}}}
 elif compiler_set == 'gnu':#{{{
-  c_compiler      = ['mpicc',  '-cc=gcc',  '-fopenmp']
-  cxx_compiler    = ['mpicxx', '-cxx=g++', '-fopenmp']
+  c_compiler      = ['mpicc',  '-cc=gcc',  '-fopenmp', '-DUSE_OPENMP']
+  cxx_compiler    = ['mpicxx', '-cxx=g++', '-fopenmp', '-DUSE_OPENMP']
   linker          = cxx_compiler
   warn_flags      = ['-Wall', '-Wextra', '-Wno-write-strings']
   optimize_flags  = ['-O2']

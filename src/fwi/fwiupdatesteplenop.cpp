@@ -49,15 +49,15 @@ void calMaxAlpha2_3(const Velocity &exvel,  const float *grad, float dt, float d
 } /// end of name space
 
 FwiUpdateSteplenOp::FwiUpdateSteplenOp(const Damp4t10d &fmMethod, const FwiUpdateVelOp &updateVelOp,
-    int max_iter_select_alpha3, float maxdv) :
-  fmMethod(fmMethod), updateVelOp(updateVelOp), encsrc(NULL), encobs(NULL),
-  max_iter_select_alpha3(max_iter_select_alpha3), maxdv(maxdv)
+    int max_iter_select_alpha3, float maxdv, int ns, int ng, int nt, std::vector<float> *encsrc) :
+  fmMethod(fmMethod), updateVelOp(updateVelOp), encsrc(encsrc), encobs(NULL),
+  max_iter_select_alpha3(max_iter_select_alpha3), maxdv(maxdv), ns(ns), ng(ng), nt(nt)
 {
 
 }
 
 float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
-    float steplen) const {
+    float steplen, int shot_id) const {
   int nx = fmMethod.getnx();
   int nz = fmMethod.getnz();
   int nt = fmMethod.getnt();
@@ -72,11 +72,14 @@ float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
   //forward modeling
   int ng = fmMethod.getng();
   std::vector<float> dcal(nt * ng);
-  updateMethod.EssForwardModeling(*encsrc, dcal);
+  updateMethod.FwiForwardModeling(*encsrc, dcal, shot_id);
 
-  updateMethod.removeDirectArrival(&dcal[0]);
+  updateMethod.fwiRemoveDirectArrival(&dcal[0], shot_id);
 
   std::vector<float> vdiff(nt * ng, 0);
+		INFO() << "****sum encobs: " << std::accumulate((*encobs).begin(), (*encobs).begin() + ng * nt, 0.0f);
+		INFO() << "****sum2 dcal: " << std::accumulate(dcal.begin(), dcal.begin() + ng * nt, 0.0f);
+	
   vectorMinus(*encobs, dcal, vdiff);
   float val = cal_objective(&vdiff[0], vdiff.size());
 
@@ -86,7 +89,7 @@ float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
 }
 
 bool FwiUpdateSteplenOp::refineAlpha(const std::vector<float> &grad, float obj_val1, float maxAlpha3,
-    float& _alpha2, float& _obj_val2, float& _alpha3, float& _obj_val3) const {
+    float& _alpha2, float& _obj_val2, float& _alpha3, float& _obj_val3, int shot_id) const {
 
   TRACE() << "SELECTING THE RIGHT OBJECTIVE VALUE 3";
 
@@ -94,8 +97,10 @@ bool FwiUpdateSteplenOp::refineAlpha(const std::vector<float> &grad, float obj_v
   float alpha2 = _alpha2;
   float obj_val2, obj_val3 = 0;
 
-  obj_val2 = calobjval(grad, alpha2);
-  obj_val3 = calobjval(grad, alpha3);
+	fmMethod.fwiRemoveDirectArrival(&(*encobs)[0], shot_id);
+
+  obj_val2 = calobjval(grad, alpha2, shot_id);
+  obj_val3 = calobjval(grad, alpha3, shot_id);
 
   //DEBUG() << "BEFORE TUNNING";
   DEBUG() << __FUNCTION__ << format(" alpha1 = %e, obj_val1 = %e") % 0. % obj_val1;
@@ -201,19 +206,18 @@ bool FwiUpdateSteplenOp::refineAlpha(const std::vector<float> &grad, float obj_v
     return toParabolicFit;
   }
 
+	*/
   /// return objval2 and objval3
   bool toParabolicFit = true;
-  _alpha2 = alpha2;
-  _alpha3 = alpha3;
+  //_alpha2 = alpha2;
+  //_alpha3 = alpha3;
   _obj_val2 = obj_val2;
   _obj_val3 = obj_val3;
 
-  DEBUG() << __FUNCTION__ << format(" alpha2 = %e, obj_val2 = %e") % _alpha2 % _obj_val2;
-  DEBUG() << __FUNCTION__ << format(" alpha3 = %e, obj_val3 = %e") % _alpha3 % _obj_val3;
+  //DEBUG() << __FUNCTION__ << format(" alpha2 = %e, obj_val2 = %e") % _alpha2 % _obj_val2;
+  //DEBUG() << __FUNCTION__ << format(" alpha3 = %e, obj_val3 = %e") % _alpha3 % _obj_val3;
 
   return toParabolicFit;
-	*/
-	return true;
 }
 
 void FwiUpdateSteplenOp::parabola_fit(float alpha1, float alpha2, float alpha3, float obj_val1, float obj_val2, float obj_val3, float max_alpha3, bool toParabolic, int iter, float &steplen, float &objval) {
@@ -248,7 +252,7 @@ void FwiUpdateSteplenOp::parabola_fit(float alpha1, float alpha2, float alpha3, 
   objval = obj_val4;
 }
 
-void FwiUpdateSteplenOp::calsteplen(const std::vector<float>& grad,
+void FwiUpdateSteplenOp::calsteplen(const std::vector<float> &dobs, const std::vector<float>& grad,
     float obj_val1, int iter, float &steplen, float &objval) {
 
   float dt = fmMethod.getdt();
@@ -264,17 +268,36 @@ void FwiUpdateSteplenOp::calsteplen(const std::vector<float>& grad,
 	this->obj_val1 = obj_val1;
   initAlpha23(max_alpha3, alpha2, alpha3);
   DEBUG() << format("after init alpha,  alpha2 = %e,      alpha3: = %e") % alpha2 % alpha3;
+	obj_val1_sum = 0.0f;
+	obj_val2_sum = 0.0f;
+	obj_val3_sum = 0.0f;
 
-  bool toParabolic = refineAlpha(grad, obj_val1, max_alpha3, alpha2, obj_val2, alpha3, obj_val3);
+	maxAlpha3 = max_alpha3;
+
+	for(int is = 0 ; is < ns ; is ++)
+	{
+		std::vector<float> t_obs(ng * nt);
+		memcpy(&t_obs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		encobs = &t_obs;
+		INFO() << format("calculate steplen, shot id: %d") % is;
+		toParabolic = refineAlpha(grad, obj_val1, max_alpha3, alpha2, obj_val2, alpha3, obj_val3, is);
+		obj_val2_sum += obj_val2;
+		obj_val3_sum += obj_val3;
+	}
+	obj_val1_sum = obj_val1;
+  INFO() << format("In calsteplen(): iter %d  alpha = %e total obj_val1 = %e") % iter % alpha1 % obj_val1_sum;
+  INFO() << format("In calsteplen(): iter %d  alpha2 = %e total obj_val2 = %e") % iter % alpha2 % obj_val2_sum;
+  INFO() << format("In calsteplen(): iter %d  alpha3 = %e total obj_val3 = %e") % iter % alpha3 % obj_val3_sum;
 }
 
 void FwiUpdateSteplenOp::bindEncSrcObs(const std::vector<float>& encsrc,
     const std::vector<float>& encobs) {
   this->encsrc = &encsrc;
-  this->encobs = &encobs;
+  //this->encobs = &encobs;
 }
 
 void FwiUpdateSteplenOp::initAlpha23(float maxAlpha3, float &initAlpha2, float &initAlpha3) {
+	/*
   const float minAlpha   = 1.0E-7;
   const float resetAlpha = 1.0E-4;
 
@@ -286,4 +309,7 @@ void FwiUpdateSteplenOp::initAlpha23(float maxAlpha3, float &initAlpha2, float &
   initAlpha3 = preservedAlpha.alpha;
   initAlpha3 = initAlpha3 < minAlpha ? resetAlpha : initAlpha3;
   initAlpha2 = initAlpha3 * 0.5;
+	*/
+	initAlpha3 = maxAlpha3;
+	initAlpha2 = initAlpha3 * 0.5;
 }

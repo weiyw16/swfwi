@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
   ShotDataReader::serialRead(params.shots, &dobs[0], ns, nt, ng);
 
   FwiUpdateVelOp updatevelop(vmin, vmax, dx, dt);
-  FwiUpdateSteplenOp updateSteplenOp(fmMethod, updatevelop, nita, maxdv);
+  FwiUpdateSteplenOp updateSteplenOp(fmMethod, updatevelop, nita, maxdv, ns, ng, nt, &wlt);
 
   FwiFramework fwi(fmMethod, updateSteplenOp, updatevelop, wlt, dobs);
 

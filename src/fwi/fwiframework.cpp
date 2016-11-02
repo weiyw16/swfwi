@@ -330,9 +330,14 @@ void FwiFramework::epoch(int iter) {
 		std::vector<float> trans_dcal(ng * nt, 0.0f);
 		matrix_transpose(&dcal[0], &trans_dcal[0], ng, nt);
 
-		FILE *f_dcal = fopen("dcal.bin", "wb");
-		fwrite(&trans_dcal[0], sizeof(float), ng * nt, f_dcal);
-		fclose(f_dcal);
+		/*
+		if(iter == 1 && is == 0)
+		{
+			FILE *f_dcal = fopen("dcal.bin", "wb");
+			fwrite(&trans_dcal[0], sizeof(float), ng * nt, f_dcal);
+			fclose(f_dcal);
+		}
+		*/
 
 		INFO() << dcal[0];
 		INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.begin() + ng * nt, 0.0f);
@@ -358,46 +363,45 @@ void FwiFramework::epoch(int iter) {
 
 		DEBUG() << format("grad %.20f") % sum(g1);
 
-		fmMethod.scaleGradient(&g1[0]);
+		//fmMethod.scaleGradient(&g1[0]);
 		fmMethod.maskGradient(&g1[0]);
 
+		/*
 		char filename[20];
 		sprintf(filename, "gradient%02d.bin", is);
 		FILE *f = fopen(filename,"wb");
 		fwrite(&g1[0], sizeof(float), nx * nz, f);
 		fclose(f);
+		*/
 
 		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
+
+		DEBUG() << format("global grad %.20f") % sum(g2);
 	}
 
   updateGrad(&g0[0], &g2[0], &updateDirection[0], g0.size(), iter);
 
 	float steplen;
-	float alpha1 = 0, alpha2 = 0, alpha3 = 0;
 	float obj_val1 = 0, obj_val2 = 0, obj_val3 = 0;
-	float maxAlpha3 = 0;
-	bool toParabolic = true;
-	for(int is = 0 ; is < ns ; is ++) {
-		INFO() << format("calculate steplen, shot id: %d") % is;
-		memcpy(&encobs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
-		updateStenlelOp.bindEncSrcObs(encsrc, encobs);
-		updateStenlelOp.calsteplen(updateDirection, obj1, iter, steplen, updateobj);
-		float t_obj_val1, t_obj_val2, t_obj_val3;
-		alpha1 = updateStenlelOp.alpha1;
-		alpha2 = updateStenlelOp.alpha2;
-		alpha3 = updateStenlelOp.alpha3;
-		maxAlpha3 = updateStenlelOp.maxAlpha3;
-		t_obj_val1 = updateStenlelOp.obj_val1;
-		t_obj_val2 = updateStenlelOp.obj_val2;
-		t_obj_val3 = updateStenlelOp.obj_val3;
-		obj_val1 += t_obj_val1;
-		obj_val2 += t_obj_val2;
-		obj_val3 += t_obj_val3;
-	}
-	updateStenlelOp.parabola_fit(alpha1, alpha2, alpha3, obj_val1, obj_val2, obj_val3, maxAlpha3, toParabolic, iter, steplen, updateobj);
+
+	updateStenlelOp.calsteplen(dobs, updateDirection, obj1, iter, steplen, updateobj);
+	
+	float alpha1 = updateStenlelOp.alpha1;
+	float alpha2 = updateStenlelOp.alpha2;
+	float alpha3 = updateStenlelOp.alpha3;
+	float obj_val1_sum = updateStenlelOp.obj_val1_sum;
+	float obj_val2_sum = updateStenlelOp.obj_val2_sum;
+	float obj_val3_sum = updateStenlelOp.obj_val3_sum;
+	float maxAlpha3 = updateStenlelOp.maxAlpha3;
+	bool	toParabolic = updateStenlelOp.toParabolic;
+	updateStenlelOp.parabola_fit(alpha1, alpha2, alpha3, obj_val1_sum, obj_val2_sum, obj_val3_sum, maxAlpha3, toParabolic, iter, steplen, updateobj);
+
+  INFO() << format("In calculate_steplen(): iter %d  steplen (alpha4) = %e") % iter % steplen;
 
   Velocity &exvel = fmMethod.getVelocity();
+	INFO() << format("sum vel %f") % sum(exvel.dat);
   updateVelOp.update(exvel, exvel, updateDirection, steplen);
+	INFO() << format("sum vel2 %f") % sum(exvel.dat);
 
   fmMethod.refillBoundary(&exvel.dat[0]);
 }
