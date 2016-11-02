@@ -103,9 +103,11 @@ bool FwiUpdateSteplenOp::refineAlpha(const std::vector<float> &grad, float obj_v
   obj_val3 = calobjval(grad, alpha3, shot_id);
 
   //DEBUG() << "BEFORE TUNNING";
+	/*
   DEBUG() << __FUNCTION__ << format(" alpha1 = %e, obj_val1 = %e") % 0. % obj_val1;
   DEBUG() << __FUNCTION__ << format(" alpha2 = %e, obj_val2 = %e") % alpha2 % obj_val2;
   DEBUG() << __FUNCTION__ << format(" alpha3 = %e, obj_val3 = %e") % alpha3 % obj_val3;
+	*/
 
 
 	/*
@@ -253,7 +255,7 @@ void FwiUpdateSteplenOp::parabola_fit(float alpha1, float alpha2, float alpha3, 
 }
 
 void FwiUpdateSteplenOp::calsteplen(const std::vector<float> &dobs, const std::vector<float>& grad,
-    float obj_val1, int iter, float &steplen, float &objval) {
+    float obj_val1, int iter, float &steplen, float &objval, int rank, int shot_begin , int shot_end) {
 
   float dt = fmMethod.getdt();
   float dx = fmMethod.getdx();
@@ -268,26 +270,33 @@ void FwiUpdateSteplenOp::calsteplen(const std::vector<float> &dobs, const std::v
 	this->obj_val1 = obj_val1;
   initAlpha23(max_alpha3, alpha2, alpha3);
   DEBUG() << format("after init alpha,  alpha2 = %e,      alpha3: = %e") % alpha2 % alpha3;
+	float local_obj_val2_sum = 0.0f;
+	float local_obj_val3_sum = 0.0f;
 	obj_val1_sum = 0.0f;
 	obj_val2_sum = 0.0f;
 	obj_val3_sum = 0.0f;
 
 	maxAlpha3 = max_alpha3;
 
-	for(int is = 0 ; is < ns ; is ++)
+	for(int is = shot_begin ; is < shot_end ; is ++)
 	{
 		std::vector<float> t_obs(ng * nt);
 		memcpy(&t_obs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 		encobs = &t_obs;
 		INFO() << format("calculate steplen, shot id: %d") % is;
 		toParabolic = refineAlpha(grad, obj_val1, max_alpha3, alpha2, obj_val2, alpha3, obj_val3, is);
-		obj_val2_sum += obj_val2;
-		obj_val3_sum += obj_val3;
+		local_obj_val2_sum += obj_val2;
+		local_obj_val3_sum += obj_val3;
 	}
 	obj_val1_sum = obj_val1;
-  INFO() << format("In calsteplen(): iter %d  alpha = %e total obj_val1 = %e") % iter % alpha1 % obj_val1_sum;
-  INFO() << format("In calsteplen(): iter %d  alpha2 = %e total obj_val2 = %e") % iter % alpha2 % obj_val2_sum;
-  INFO() << format("In calsteplen(): iter %d  alpha3 = %e total obj_val3 = %e") % iter % alpha3 % obj_val3_sum;
+	MPI_Allreduce(&local_obj_val2_sum, &obj_val2_sum, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(&local_obj_val3_sum, &obj_val3_sum, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	if(rank == 0)
+	{
+		INFO() << format("In calsteplen(): iter %d  alpha = %e total obj_val1 = %e") % iter % alpha1 % obj_val1_sum;
+		INFO() << format("In calsteplen(): iter %d  alpha2 = %e total obj_val2 = %e") % iter % alpha2 % obj_val2_sum;
+		INFO() << format("In calsteplen(): iter %d  alpha3 = %e total obj_val3 = %e") % iter % alpha3 % obj_val3_sum;
+	}
 }
 
 void FwiUpdateSteplenOp::bindEncSrcObs(const std::vector<float>& encsrc,

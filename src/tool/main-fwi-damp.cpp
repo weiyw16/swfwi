@@ -6,6 +6,7 @@ extern "C" {
 #include <omp.h>
 #endif
 
+#include <mpi.h>
 #include <vector>
 #include <cstdlib>
 #include <cmath>
@@ -65,6 +66,12 @@ public: // parameters from input files
   int jsz;
   int jgx;
   int jgz;
+
+public:
+  int rank;
+  int k;
+  int np;
+  int ntask; /// exactly the # of task each process owns
 };
 
 Params::Params() {
@@ -125,6 +132,12 @@ Params::Params() {
   sf_putfloat(norobjs, "o1", 1);
   sf_putstring(norobjs, "label1", "Normalize");
 
+
+  MPI_Comm_size(MPI_COMM_WORLD, &np);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  k = std::ceil(ns * 1.0 / np);
+  ntask = std::min(k, ns - rank*k);
+
   check();
 }
 
@@ -148,12 +161,14 @@ void Params::check() {
 
 
 int main(int argc, char *argv[]) {
+  MPI_Init(&argc, &argv);
   sf_init(argc, argv);                /* initialize Madagascar */
   Environment::setDatapath();
   Params params;
 
   /// configure logger
-  const char *logfile = "fwi-damp.log";
+	char logfile[64];
+	sprintf(logfile, "fwi-damp-%d.log", params.rank);
   FILELog::setLogFile(logfile);
 
   int nz = params.nz;
@@ -169,6 +184,9 @@ int main(int argc, char *argv[]) {
   float vmax = params.vmax;
   float maxdv = params.maxdv;
   int nita = params.nita;
+  int rank = params.rank;
+  int k = params.k;
+  int ntask = params.ntask;
 
   srand(params.seed);
 
@@ -198,21 +216,27 @@ int main(int argc, char *argv[]) {
   for (int iter = 0; iter < params.niter; iter++) {
 		INFO() << format("Conventional FWI, iter %d") % iter;
 		fwi.epoch(iter);
-    fwi.writeVel(params.vupdates);
-    float obj = fwi.getUpdateObj();
-    if (iter == 0) {
-      float obj0 = fwi.getInitObj();
-      absobj.push_back(obj0);
-      norobj.push_back(1);
-    }
-    absobj.push_back(obj);
-    norobj.push_back(obj / absobj[0]);
+		if(rank == 0)
+		{
+			fwi.writeVel(params.vupdates);
+			float obj = fwi.getUpdateObj();
+			if (iter == 0) {
+				float obj0 = fwi.getInitObj();
+				absobj.push_back(obj0);
+				norobj.push_back(1);
+			}
+			absobj.push_back(obj);
+			norobj.push_back(obj / absobj[0]);
+		}
   } /// end of iteration
 
-  sf_floatwrite(&absobj[0], absobj.size(), params.absobjs);
-  sf_floatwrite(&norobj[0], norobj.size(), params.norobjs);
+	if(rank == 0)
+	{
+		sf_floatwrite(&absobj[0], absobj.size(), params.absobjs);
+		sf_floatwrite(&norobj[0], norobj.size(), params.norobjs);
 
-  sf_close();
+		sf_close();
+	}
 
   return 0;
 }

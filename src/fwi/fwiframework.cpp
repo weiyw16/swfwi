@@ -116,7 +116,7 @@ void calgradient(const Damp4t10d &fmMethod,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,
     int nt, float dt,
-		int shot_id)
+		int shot_id, int rank)
 {
   int nx = fmMethod.getnx();
   int nz = fmMethod.getnz();
@@ -145,8 +145,8 @@ void calgradient(const Damp4t10d &fmMethod,
     if ((it > 0) && (it != (nt - 1)) && !(it % check_step)) {
       char check_file_name1[64];
       char check_file_name2[64];
-      sprintf(check_file_name1, "./check_time_%d_1.su", it);
-      sprintf(check_file_name2, "./check_time_%d_2.su", it);
+      sprintf(check_file_name1, "./%d_check_time_%d_1.su", rank, it);
+      sprintf(check_file_name2, "./%d_check_time_%d_2.su", rank, it);
 			FILE *f1 = fopen(check_file_name1, "wb");
 			FILE *f2 = fopen(check_file_name2, "wb");
 			fwrite(&sp0[0], sizeof(float), nx * nz, f1);
@@ -155,8 +155,10 @@ void calgradient(const Damp4t10d &fmMethod,
 			fclose(f2);
     }
   }
-	char check_file_name1[64] = "./check_time_last_1.su";
-	char check_file_name2[64] = "./check_time_last_2.su";
+	char check_file_name1[64];
+	char check_file_name2[64];
+  sprintf(check_file_name1, "./%d_check_time_last_1.su", rank);
+  sprintf(check_file_name2, "./%d_check_time_last_2.su", rank);
 	FILE *f1 = fopen(check_file_name1, "wb");
 	FILE *f2 = fopen(check_file_name2, "wb");
 	fwrite(&sp0[0], sizeof(float), nx * nz, f1);
@@ -169,8 +171,10 @@ void calgradient(const Damp4t10d &fmMethod,
 		const int check_step = 5;
 		if(it == nt - 1)
 		{
-			char check_file_name1[64] = "./check_time_last_1.su";
-			char check_file_name2[64] = "./check_time_last_2.su";
+			char check_file_name1[64];
+			char check_file_name2[64];
+			sprintf(check_file_name1, "./%d_check_time_last_1.su", rank, it);
+			sprintf(check_file_name2, "./%d_check_time_last_2.su", rank, it);
 			FILE *f1 = fopen(check_file_name1, "rb");
 			FILE *f2 = fopen(check_file_name2, "rb");
 			fread(&sp1[0], sizeof(float), nx * nz, f1);
@@ -181,8 +185,8 @@ void calgradient(const Damp4t10d &fmMethod,
 		else if ((check_step > 0) && !(it % check_step) && (it != 0)) {
 			char check_file_name1[64];
 			char check_file_name2[64];
-			sprintf(check_file_name1, "./check_time_%d_1.su", it);
-			sprintf(check_file_name2, "./check_time_%d_2.su", it);
+			sprintf(check_file_name1, "./%d_check_time_%d_1.su", rank, it);
+			sprintf(check_file_name2, "./%d_check_time_%d_2.su", rank, it);
 			FILE *f1 = fopen(check_file_name1, "rb");
 			FILE *f2 = fopen(check_file_name2, "rb");
 			fread(&sp1[0], sizeof(float), nx * nz, f1);
@@ -313,10 +317,18 @@ void FwiFramework::epoch(int iter) {
 
 void FwiFramework::epoch(int iter) {
 	std::vector<float> g2(nx * nz, 0);
+	std::vector<float> g3(nx * nz, 0);
 	std::vector<float> encsrc(wlt);
 	std::vector<float> encobs(ng * nt, 0);
-	float obj1 = 0.0f;
-	for(int is = 0 ; is < ns ; is ++) {
+	int rank, np, k, ntask, shot_begin, shot_end;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &np);
+  k = std::ceil(ns * 1.0 / np);
+  ntask = std::min(k, ns - rank*k);
+	shot_begin = rank * k;
+	shot_end = shot_begin + ntask;
+	float local_obj1 = 0.0f, obj1 = 0.0f;
+	for(int is = shot_begin ; is < shot_end ; is ++) {
 		INFO() << format("calculate gradient, shot id: %d") % is;
 		memcpy(&encobs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 
@@ -350,7 +362,7 @@ void FwiFramework::epoch(int iter) {
 
 		std::vector<float> vsrc(nt * ng, 0);
 		vectorMinus(encobs, dcal, vsrc);
-		obj1 += cal_objective(&vsrc[0], vsrc.size());
+		local_obj1 += cal_objective(&vsrc[0], vsrc.size());
 		initobj = iter == 0 ? obj1 : initobj;
 		DEBUG() << format("obj: %e") % obj1;
 
@@ -359,7 +371,7 @@ void FwiFramework::epoch(int iter) {
 		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.begin() + ng * nt, 0.0f);
 
 		std::vector<float> g1(nx * nz, 0);
-		calgradient(fmMethod, encsrc, vsrc, g1, nt, dt, is);
+		calgradient(fmMethod, encsrc, vsrc, g1, nt, dt, is, rank);
 
 		DEBUG() << format("grad %.20f") % sum(g1);
 
@@ -378,13 +390,22 @@ void FwiFramework::epoch(int iter) {
 
 		DEBUG() << format("global grad %.20f") % sum(g2);
 	}
+	
+	MPI_Allreduce(&g2[0], &g3[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(&local_obj1, &obj1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
-  updateGrad(&g0[0], &g2[0], &updateDirection[0], g0.size(), iter);
+	if(rank == 0)
+	{
+		DEBUG() << format("****** global grad %.20f") % sum(g3);
+		DEBUG() << format("****** sum obj: %.20f") % obj1;
+	}
+
+  updateGrad(&g0[0], &g3[0], &updateDirection[0], g0.size(), iter);
 
 	float steplen;
 	float obj_val1 = 0, obj_val2 = 0, obj_val3 = 0;
 
-	updateStenlelOp.calsteplen(dobs, updateDirection, obj1, iter, steplen, updateobj);
+	updateStenlelOp.calsteplen(dobs, updateDirection, obj1, iter, steplen, updateobj, rank, shot_begin, shot_end);
 	
 	float alpha1 = updateStenlelOp.alpha1;
 	float alpha2 = updateStenlelOp.alpha2;
@@ -396,12 +417,15 @@ void FwiFramework::epoch(int iter) {
 	bool	toParabolic = updateStenlelOp.toParabolic;
 	updateStenlelOp.parabola_fit(alpha1, alpha2, alpha3, obj_val1_sum, obj_val2_sum, obj_val3_sum, maxAlpha3, toParabolic, iter, steplen, updateobj);
 
-  INFO() << format("In calculate_steplen(): iter %d  steplen (alpha4) = %e") % iter % steplen;
+	if(rank == 0)
+		INFO() << format("In calculate_steplen(): iter %d  steplen (alpha4) = %e") % iter % steplen;
 
   Velocity &exvel = fmMethod.getVelocity();
-	INFO() << format("sum vel %f") % sum(exvel.dat);
+	if(rank == 0)
+		INFO() << format("sum vel %f") % sum(exvel.dat);
   updateVelOp.update(exvel, exvel, updateDirection, steplen);
-	INFO() << format("sum vel2 %f") % sum(exvel.dat);
+	if(rank == 0)
+		INFO() << format("sum vel2 %f") % sum(exvel.dat);
 
   fmMethod.refillBoundary(&exvel.dat[0]);
 }

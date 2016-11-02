@@ -9,6 +9,7 @@
 #define SRC_ESS_FWI2D_UPDATESTEPLENOP_H_
 
 #include <vector>
+#include <mpi.h>
 #include "damp4t10d.h"
 #include "fwiupdatevelop.h"
 
@@ -17,7 +18,7 @@ public:
   FwiUpdateSteplenOp(const Damp4t10d &fmMethod, const FwiUpdateVelOp &updateVelOp, int max_iter_select_alpha3, float maxdv, int ns, int ng, int nt, std::vector<float> *encsrc);
 
   void bindEncSrcObs(const std::vector<float> &encsrc, const std::vector<float> &encobs);
-  void calsteplen(const std::vector<float> &dobs, const std::vector<float> &grad, float obj_val1, int iter, float &steplen, float &objval);
+  void calsteplen(const std::vector<float> &dobs, const std::vector<float> &grad, float obj_val1, int iter, float &steplen, float &objval,int rank, int shot_begin, int shot_end);
 	void parabola_fit(float alpha1, float alpha2, float alpha3, float obj_val1, float obj_val2, float obj_val3, float maxAlpha3, bool toParabolic, int iter, float &steplen, float &objval);
 
 public:
