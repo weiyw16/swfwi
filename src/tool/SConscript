@@ -9,6 +9,7 @@ bin_list = [
 ("noise", "main-noise.cpp"),
 ("test", "main-test.cpp"),
 ("fm-damp", "main-fm-damp.cpp"),
+("born", "main-born.cpp"),
            ]
 
 modules = """

@@ -320,6 +320,12 @@ void FwiFramework::epoch(int iter) {
 		INFO() << format("calculate gradient, shot id: %d") % is;
 		memcpy(&encobs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 
+		sf_file sf_encobs = sf_output("encobs.rsf");
+		sf_putint(sf_encobs, "n1", nt);
+		sf_putint(sf_encobs, "n2", ng);
+		sf_floatwrite(&encobs[0], nt * ng, sf_encobs);
+		exit(1);
+		
 		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.begin() + ng * nt, 0.0f);
 		INFO() << encsrc[0] << " " << encsrc[132];
 		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
