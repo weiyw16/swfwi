@@ -125,7 +125,8 @@ static void expandBndry(Velocity &exvel, const Velocity &v0, int nb) {
 
 static void transvel(std::vector<float> &vel, float dx, float dt) {
   for (size_t i = 0; i < vel.size(); i ++) {
-    vel[i] = (dx * dx) / (vel[i] * vel[i] * dt * dt);
+    //vel[i] = (dx * dx) / (vel[i] * vel[i] * dt * dt);
+    vel[i] = (dx * dx) / (dt * dt * vel[i] * vel[i]);
   }
 }
 
@@ -142,6 +143,12 @@ Velocity Damp4t10d::expandDomain(const Velocity& _vel) {
   expandBndry(exvelForBndry, _vel, nb);
 
   transvel(exvelForBndry.dat, dx, dt);
+
+	sf_file sf_v1 = sf_output("v0_trans.rsf");
+	sf_putint(sf_v1, "n1", _vel.nz + nb);
+	sf_putint(sf_v1, "n2", _vel.nx + 2 * nb);
+	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + nb) * (_vel.nx + 2 * nb), sf_v1);
+	exit(1);
 
   // expand for stencil
   Velocity ret(exvelForBndry.nx+2*EXFDBNDRYLEN, exvelForBndry.nz+2*EXFDBNDRYLEN);
@@ -279,6 +286,16 @@ void Damp4t10d::FwiForwardModeling(const std::vector<float>& encSrc,
   std::vector<float> p0(nz * nx, 0);
   std::vector<float> p1(nz * nx, 0);
   ShotPosition curSrcPos = allSrcPos->clipRange(shot_id, shot_id);
+
+	sf_file sf_v0 = sf_input("/home/cbw/fwijob/fwi_test2/v0.rsf");
+	sf_floatread(const_cast<float*>(&vel->dat[0]), nz * nx, sf_v0);
+
+	/*
+	sf_file sf_v1 = sf_output("v1.rsf");
+	sf_putint(sf_v1, "n1", nz);
+	sf_putint(sf_v1, "n2", nx);
+	sf_floatwrite(const_cast<float*>(&vel->dat[0]), nz * nx, sf_v1);
+	*/
 
   for(int it=0; it<nt; it++) {
     addSource(&p1[0], &encSrc[it], curSrcPos);

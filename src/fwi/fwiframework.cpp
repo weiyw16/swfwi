@@ -320,18 +320,32 @@ void FwiFramework::epoch(int iter) {
 		INFO() << format("calculate gradient, shot id: %d") % is;
 		memcpy(&encobs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 
+		/*
+		std::vector<float> trans(nt * ng, 0.0f);
+		matrix_transpose(&encobs[0], &trans[0], ng, nt);
 		sf_file sf_encobs = sf_output("encobs.rsf");
 		sf_putint(sf_encobs, "n1", nt);
 		sf_putint(sf_encobs, "n2", ng);
-		sf_floatwrite(&encobs[0], nt * ng, sf_encobs);
-		exit(1);
+		sf_floatwrite(&trans[0], nt * ng, sf_encobs);
+		*/
 		
+		sf_file sf_encsrc = sf_output("encsrc.rsf");
+		sf_putint(sf_encsrc, "n1", nt);
+		sf_floatwrite(&encsrc[0], nt, sf_encsrc);
+
 		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.begin() + ng * nt, 0.0f);
 		INFO() << encsrc[0] << " " << encsrc[132];
 		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
 
 		std::vector<float> dcal(nt * ng, 0);
 		fmMethod.FwiForwardModeling(encsrc, dcal, is);
+
+		std::vector<float> dtrans(nt * ng, 0.0f);
+		matrix_transpose(&dcal[0], &dtrans[0], ng, nt);
+		sf_file sf_dcal = sf_output("dcal.rsf");
+		sf_putint(sf_dcal, "n1", nt);
+		sf_putint(sf_dcal, "n2", ng);
+		sf_floatwrite(&dtrans[0], nt * ng, sf_dcal);
 
 		std::vector<float> trans_dcal(ng * nt, 0.0f);
 		matrix_transpose(&dcal[0], &trans_dcal[0], ng, nt);
