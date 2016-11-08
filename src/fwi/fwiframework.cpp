@@ -95,13 +95,9 @@ void second_order_virtual_source_forth_accuracy(float *vsrc, int num) {
 }
 
 void transVsrc(std::vector<float> &vsrc, int nt, int ng) {
-  std::vector<float> trans(nt * ng);
-  matrix_transpose(&vsrc[0], &trans[0], ng, nt);
   for (int ig = 0; ig < ng; ig++) {
-    second_order_virtual_source_forth_accuracy(&trans[ig * nt], nt);
+    second_order_virtual_source_forth_accuracy(&vsrc[ig * nt], nt);
   }
-
-  matrix_transpose(&trans[0], &vsrc[0], nt, ng);
 }
 
 void cross_correlation(float *src_wave, float *vsrc_wave, float *image, int model_size, float scale) {
@@ -164,6 +160,9 @@ void calgradient(const Damp4t10d &fmMethod,
 	fclose(f1);
 	fclose(f2);
 
+  std::vector<float> vsrc_trans(ng * nt, 0.0f);
+  matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
+
   for(int it = nt - 1; it >= 0 ; it--) {
     //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
 		const int check_step = 5;
@@ -200,7 +199,7 @@ void calgradient(const Damp4t10d &fmMethod,
     /**
      * forward propagate receviers
      */
-    fmMethod.addSource(&gp1[0], &vsrc[it * ng], allGeoPos);
+    fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
     //printf("it = %d, receiver 1\n", it);
     fmMethod.stepForward(&gp0[0], &gp1[0]);
     //printf("it = %d, receiver 2\n", it);
@@ -317,8 +316,12 @@ void FwiFramework::epoch(int iter) {
 	std::vector<float> encobs(ng * nt, 0);
 	float obj1 = 0.0f;
 	for(int is = 0 ; is < ns ; is ++) {
+		std::vector<float> encobs_trans(nt * ng, 0.0f);
 		INFO() << format("calculate gradient, shot id: %d") % is;
-		memcpy(&encobs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+
+		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
+
 
 		/*
 		std::vector<float> trans(nt * ng, 0.0f);
@@ -328,27 +331,32 @@ void FwiFramework::epoch(int iter) {
 		sf_putint(sf_encobs, "n2", ng);
 		sf_floatwrite(&trans[0], nt * ng, sf_encobs);
 		*/
-		
+
+    /*
 		sf_file sf_encsrc = sf_output("encsrc.rsf");
 		sf_putint(sf_encsrc, "n1", nt);
 		sf_floatwrite(&encsrc[0], nt, sf_encsrc);
+    */
 
-		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.begin() + ng * nt, 0.0f);
+		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
 		INFO() << encsrc[0] << " " << encsrc[132];
 		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
 
 		std::vector<float> dcal(nt * ng, 0);
-		fmMethod.FwiForwardModeling(encsrc, dcal, is);
+		std::vector<float> dcal_trans(ng * nt, 0.0f);
+		fmMethod.FwiForwardModeling(encsrc, dcal_trans, is);
 
+    /*
 		std::vector<float> dtrans(nt * ng, 0.0f);
 		matrix_transpose(&dcal[0], &dtrans[0], ng, nt);
 		sf_file sf_dcal = sf_output("dcal.rsf");
 		sf_putint(sf_dcal, "n1", nt);
 		sf_putint(sf_dcal, "n2", ng);
 		sf_floatwrite(&dtrans[0], nt * ng, sf_dcal);
+    exit(1);
+    */
 
-		std::vector<float> trans_dcal(ng * nt, 0.0f);
-		matrix_transpose(&dcal[0], &trans_dcal[0], ng, nt);
+		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
 
 		/*
 		if(iter == 1 && is == 0)
@@ -360,26 +368,63 @@ void FwiFramework::epoch(int iter) {
 		*/
 
 		INFO() << dcal[0];
-		INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.begin() + ng * nt, 0.0f);
+		INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
 
 		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
 		fmMethod.fwiRemoveDirectArrival(&dcal[0], is);
 
-		INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.begin() + ng * nt, 0.0f);
-		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.begin() + ng * nt, 0.0f);
+    /*
+		std::vector<float> trans(nt * ng, 0.0f);
+		matrix_transpose(&encobs[0], &trans[0], ng, nt);
+		sf_file sf_encobs = sf_output("encobs2.rsf");
+		sf_putint(sf_encobs, "n1", nt);
+		sf_putint(sf_encobs, "n2", ng);
+		sf_floatwrite(&trans[0], nt * ng, sf_encobs);
+    exit(1);
+    */
+
+    /*
+		std::vector<float> dtrans(nt * ng, 0.0f);
+		matrix_transpose(&dcal[0], &dtrans[0], ng, nt);
+		sf_file sf_dcal = sf_output("dcal2.rsf");
+		sf_putint(sf_dcal, "n1", nt);
+		sf_putint(sf_dcal, "n2", ng);
+		sf_floatwrite(&dtrans[0], nt * ng, sf_dcal);
+    exit(1);
+    */
+
+		INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
+		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
 
 		std::vector<float> vsrc(nt * ng, 0);
 		vectorMinus(encobs, dcal, vsrc);
 		obj1 += cal_objective(&vsrc[0], vsrc.size());
 		initobj = iter == 0 ? obj1 : initobj;
-		DEBUG() << format("obj: %e") % obj1;
+		//DEBUG() << format("obj: %e") % obj1;
+		INFO() << "obj: " << obj1 << "\n";
 
 		transVsrc(vsrc, nt, ng);
 
-		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.begin() + ng * nt, 0.0f);
+		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
 
 		std::vector<float> g1(nx * nz, 0);
 		calgradient(fmMethod, encsrc, vsrc, g1, nt, dt, is);
+
+    /*
+		sf_file sf_g1 = sf_output("g1.rsf");
+		sf_putint(sf_g1, "n1", nz);
+		sf_putint(sf_g1, "n2", nx);
+		sf_floatwrite(&g1[0], nx * nz, sf_g1);
+    exit(1);
+    */
+
+    /*
+		sf_file sf_vsrc= sf_output("vsrc.rsf");
+		sf_putint(sf_vsrc, "n1", nt);
+		sf_putint(sf_vsrc, "n2", ng);
+		sf_floatwrite(&vsrc[0], nt * ng, sf_vsrc);
+    exit(1);
+    */
 
 		DEBUG() << format("grad %.20f") % sum(g1);
 
@@ -396,16 +441,42 @@ void FwiFramework::epoch(int iter) {
 
 		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
 
+    /*
+		sf_file sf_g2 = sf_output("g2.rsf");
+		sf_putint(sf_g2, "n1", nz);
+		sf_putint(sf_g2, "n2", nx);
+		sf_floatwrite(&g2[0], nx * nz, sf_g2);
+    exit(1);
+    */
+
 		DEBUG() << format("global grad %.20f") % sum(g2);
 	}
 
+  /*
+	sf_file sf_g2 = sf_output("g2.rsf");
+	sf_putint(sf_g2, "n1", nz);
+	sf_putint(sf_g2, "n2", nx);
+	sf_floatwrite(&g2[0], nx * nz, sf_g2);
+  exit(1);
+  */
+
   updateGrad(&g0[0], &g2[0], &updateDirection[0], g0.size(), iter);
+
+  /*
+	sf_file sf_ud = sf_output("updateDirection.rsf");
+	sf_putint(sf_ud, "n1", nz);
+	sf_putint(sf_ud, "n2", nx);
+	sf_floatwrite(&updateDirection[0], nx * nz, sf_ud);
+  exit(1);
+  */
 
 	float steplen;
 	float obj_val1 = 0, obj_val2 = 0, obj_val3 = 0;
 
 	updateStenlelOp.calsteplen(dobs, updateDirection, obj1, iter, steplen, updateobj);
-	
+  INFO() << format("steplen = %.20f") % steplen;
+  exit(1);
+
 	float alpha1 = updateStenlelOp.alpha1;
 	float alpha2 = updateStenlelOp.alpha2;
 	float alpha3 = updateStenlelOp.alpha3;

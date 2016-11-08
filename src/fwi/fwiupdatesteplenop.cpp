@@ -64,7 +64,28 @@ float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
 
   const Velocity &oldVel = fmMethod.getVelocity();
   Velocity newVel(nx, nz);
+
+  /*
+	sf_file sf_oldvel = sf_output("oldvel_before.rsf");
+	sf_putint(sf_oldvel, "n1", nz);
+	sf_putint(sf_oldvel, "n2", nx);
+	sf_floatwrite(const_cast<float*>(&oldVel.dat[0]), nx * nz, sf_oldvel);
+
+	sf_file sf_grad = sf_output("grad_before.rsf");
+	sf_putint(sf_grad, "n1", nz);
+	sf_putint(sf_grad, "n2", nx);
+	sf_floatwrite(const_cast<float*>(&grad[0]), nx * nz, sf_grad);
+  */
+
   updateVelOp.update(newVel, oldVel, grad, steplen);
+
+  /*
+	sf_file sf_newvel = sf_output("newvel_after.rsf");
+	sf_putint(sf_newvel, "n1", nz);
+	sf_putint(sf_newvel, "n2", nx);
+	sf_floatwrite(&newVel.dat[0], nx * nz, sf_newvel);
+  exit(1);
+  */
 
   Damp4t10d updateMethod = fmMethod;
   updateMethod.bindVelocity(newVel);
@@ -72,9 +93,27 @@ float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
   //forward modeling
   int ng = fmMethod.getng();
   std::vector<float> dcal(nt * ng);
-  updateMethod.FwiForwardModeling(*encsrc, dcal, shot_id);
+  std::vector<float> dcal_trans(nt * ng);
+  updateMethod.FwiForwardModeling(*encsrc, dcal_trans, shot_id);
+	matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
 
+  /*
+	sf_file sf_dcal2 = sf_output("dcal2.rsf");
+	sf_putint(sf_dcal2, "n1", nt);
+	sf_putint(sf_dcal2, "n2", ng);
+	sf_floatwrite(&dcal[0], nt * ng, sf_dcal2);
+  exit(1);
+  */
+
+  updateMethod.bindVelocity(oldVel);  //-test
   updateMethod.fwiRemoveDirectArrival(&dcal[0], shot_id);
+  updateMethod.bindVelocity(newVel);  //-test
+
+	sf_file sf_dcal2 = sf_output("dcal2.rsf");
+	sf_putint(sf_dcal2, "n1", nt);
+	sf_putint(sf_dcal2, "n2", ng);
+	sf_floatwrite(&dcal[0], nt * ng, sf_dcal2);
+  exit(1);
 
   std::vector<float> vdiff(nt * ng, 0);
 		INFO() << "****sum encobs: " << std::accumulate((*encobs).begin(), (*encobs).begin() + ng * nt, 0.0f);
@@ -277,7 +316,10 @@ void FwiUpdateSteplenOp::calsteplen(const std::vector<float> &dobs, const std::v
 	for(int is = 0 ; is < ns ; is ++)
 	{
 		std::vector<float> t_obs(ng * nt);
-		memcpy(&t_obs[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		std::vector<float> t_obs_trans(ng * nt);
+		memcpy(&t_obs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+	  matrix_transpose(&t_obs_trans[0], &t_obs[0], ng, nt);
+
 		encobs = &t_obs;
 		INFO() << format("calculate steplen, shot id: %d") % is;
 		toParabolic = refineAlpha(grad, obj_val1, max_alpha3, alpha2, obj_val2, alpha3, obj_val3, is);

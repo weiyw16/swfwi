@@ -71,7 +71,6 @@ static void fillForStencil(Velocity &exvel, int halo) {
       vel_e[ix * nzpad + iz] = vel_e[(nx + halo - 1) * nzpad + iz]; // right
     }
   }
-
 }
 
 static void expandForStencil(Velocity &exvel, const Velocity &v0, int halo) {
@@ -142,17 +141,35 @@ Velocity Damp4t10d::expandDomain(const Velocity& _vel) {
   Velocity exvelForBndry(_vel.nx + 2 * nb, _vel.nz + nb);
   expandBndry(exvelForBndry, _vel, nb);
 
-  transvel(exvelForBndry.dat, dx, dt);
-
-	sf_file sf_v1 = sf_output("v0_trans.rsf");
+  /*
+	sf_file sf_v1 = sf_output("v0_bndry.rsf");
 	sf_putint(sf_v1, "n1", _vel.nz + nb);
 	sf_putint(sf_v1, "n2", _vel.nx + 2 * nb);
 	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + nb) * (_vel.nx + 2 * nb), sf_v1);
 	exit(1);
+  */
+
+  transvel(exvelForBndry.dat, dx, dt);
+
+  /*
+	sf_file sf_v1 = sf_output("v0_before.rsf");
+	sf_putint(sf_v1, "n1", _vel.nz + nb);
+	sf_putint(sf_v1, "n2", _vel.nx + 2 * nb);
+	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + nb) * (_vel.nx + 2 * nb), sf_v1);
+	exit(1);
+  */
 
   // expand for stencil
   Velocity ret(exvelForBndry.nx+2*EXFDBNDRYLEN, exvelForBndry.nz+2*EXFDBNDRYLEN);
   expandForStencil(ret, exvelForBndry, EXFDBNDRYLEN);
+
+  /*
+	sf_file sf_v1 = sf_output("v0_after.rsf");
+	sf_putint(sf_v1, "n1", ret.nz);
+	sf_putint(sf_v1, "n2", ret.nx);
+	sf_floatwrite(const_cast<float*>(&ret.dat[0]), ret.nx * ret.nz, sf_v1);
+	exit(1);
+  */
 
   return ret;
 }
@@ -287,22 +304,97 @@ void Damp4t10d::FwiForwardModeling(const std::vector<float>& encSrc,
   std::vector<float> p1(nz * nx, 0);
   ShotPosition curSrcPos = allSrcPos->clipRange(shot_id, shot_id);
 
+  /*
 	sf_file sf_v0 = sf_input("/home/cbw/fwijob/fwi_test2/v0.rsf");
 	sf_floatread(const_cast<float*>(&vel->dat[0]), nz * nx, sf_v0);
+  */
 
-	/*
+  /*
 	sf_file sf_v1 = sf_output("v1.rsf");
 	sf_putint(sf_v1, "n1", nz);
 	sf_putint(sf_v1, "n2", nx);
 	sf_floatwrite(const_cast<float*>(&vel->dat[0]), nz * nx, sf_v1);
-	*/
+  exit(1);
+  */
+
+  /*
+	sf_file sf_p0 = sf_input("/home/rice/cbw/pfwi/job/p0.rsf");
+	sf_floatread(const_cast<float*>(&p0[0]), nz * nx, sf_p0);
+  
+	sf_file sf_p1 = sf_input("/home/rice/cbw/pfwi/job/p1.rsf");
+	sf_floatread(const_cast<float*>(&p1[0]), nz * nx, sf_p1);
+  */
 
   for(int it=0; it<nt; it++) {
     addSource(&p1[0], &encSrc[it], curSrcPos);
+
+    /*
+    sf_file sf_p0 = sf_output("pp0.rsf");
+    sf_putint(sf_p0, "n1", nz);
+    sf_putint(sf_p0, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p0[0]), nz * nx, sf_p0);
+
+    sf_file sf_p1 = sf_output("pp1.rsf");
+    sf_putint(sf_p1, "n1", nz);
+    sf_putint(sf_p1, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p1[0]), nz * nx, sf_p1);
+    exit(1);
+    */
+
     stepForward(&p0[0], &p1[0]);
+
+    /*
+    sf_file sf_p0 = sf_output("pp0.rsf");
+    sf_putint(sf_p0, "n1", nz);
+    sf_putint(sf_p0, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p0[0]), nz * nx, sf_p0);
+
+    sf_file sf_p1 = sf_output("pp1.rsf");
+    sf_putint(sf_p1, "n1", nz);
+    sf_putint(sf_p1, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p1[0]), nz * nx, sf_p1);
+    exit(1);
+    */
+
     std::swap(p1, p0);
+
+    /*
+    sf_file sf_p0 = sf_output("pp0.rsf");
+    sf_putint(sf_p0, "n1", nz);
+    sf_putint(sf_p0, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p0[0]), nz * nx, sf_p0);
+
+    sf_file sf_p1 = sf_output("pp1.rsf");
+    sf_putint(sf_p1, "n1", nz);
+    sf_putint(sf_p1, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p1[0]), nz * nx, sf_p1);
+    exit(1);
+    */
+
     recordSeis(&dcal[it*ng], &p0[0]);
+
+    /*
+    sf_file sf_p0 = sf_output("pp0.rsf");
+    sf_putint(sf_p0, "n1", nz);
+    sf_putint(sf_p0, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p0[0]), nz * nx, sf_p0);
+
+    sf_file sf_p1 = sf_output("pp1.rsf");
+    sf_putint(sf_p1, "n1", nz);
+    sf_putint(sf_p1, "n2", nx);
+    sf_floatwrite(const_cast<float*>(&p1[0]), nz * nx, sf_p1);
+    exit(1);
+    */
   }
+
+  /*
+  sf_file sf_dcal0 = sf_output("dcal0.rsf");
+  sf_putint(sf_dcal0, "n1", ng);
+  sf_putint(sf_dcal0, "n2", nt);
+  sf_floatwrite(const_cast<float*>(&dcal[0]), ng * nt, sf_dcal0);
+  exit(1);
+  */
+
 }
 
 void Damp4t10d::EssForwardModeling(const std::vector<float>& encSrc,
@@ -357,12 +449,13 @@ void Damp4t10d::removeDirectArrival(const ShotPosition &allSrcPos, const ShotPos
     }
   }
   vel_average /= nx * (gmax - gmin + 1);
-//  printf("vel_average: %.20f\n", vel_average);
 
+  /*
+  printf("vel_average: %.20f\n", vel_average);
+  exit(1);
+  */
 
   int ng = allGeoPos.ns;
-  std::vector<float> trans(nt * ng);
-  matrix_transpose(&data[0], &trans[0], ng, nt);
 
   for (int itr = 0; itr < ng; itr ++) {
     int gx = allGeoPos.getx(itr) + bx0;
@@ -374,11 +467,11 @@ void Damp4t10d::removeDirectArrival(const ShotPosition &allSrcPos, const ShotPos
     int end = ((t + 2 * half_len) > nt) ? nt : (t + 2 * half_len);
 
     for (int j = start; j < end; j ++) {
-      trans[itr * nt + j] = 0.f;
+      //data[j * ng + itr] = 0.f;
+      data[itr * nt + j] = 0.f;
     }
   }
 
-  matrix_transpose(&trans[0], &data[0], nt, ng);
 }
 
 Damp4t10d::Damp4t10d(const ShotPosition& _allSrcPos, const ShotPosition& _allGeoPos,
