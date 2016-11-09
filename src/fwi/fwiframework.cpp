@@ -324,12 +324,13 @@ void FwiFramework::epoch(int iter) {
 
 
 		/*
-		std::vector<float> trans(nt * ng, 0.0f);
-		matrix_transpose(&encobs[0], &trans[0], ng, nt);
-		sf_file sf_encobs = sf_output("encobs.rsf");
-		sf_putint(sf_encobs, "n1", nt);
-		sf_putint(sf_encobs, "n2", ng);
-		sf_floatwrite(&trans[0], nt * ng, sf_encobs);
+		if(iter == 1)
+		{
+			sf_file sf_encobs = sf_output("encobs.rsf");
+			sf_putint(sf_encobs, "n1", nt);
+			sf_putint(sf_encobs, "n2", ng);
+			sf_floatwrite(&encobs[0], nt * ng, sf_encobs);
+		}
 		*/
 
     /*
@@ -345,18 +346,19 @@ void FwiFramework::epoch(int iter) {
 		std::vector<float> dcal(nt * ng, 0);
 		std::vector<float> dcal_trans(ng * nt, 0.0f);
 		fmMethod.FwiForwardModeling(encsrc, dcal_trans, is);
-
-    /*
-		std::vector<float> dtrans(nt * ng, 0.0f);
-		matrix_transpose(&dcal[0], &dtrans[0], ng, nt);
-		sf_file sf_dcal = sf_output("dcal.rsf");
-		sf_putint(sf_dcal, "n1", nt);
-		sf_putint(sf_dcal, "n2", ng);
-		sf_floatwrite(&dtrans[0], nt * ng, sf_dcal);
-    exit(1);
-    */
-
 		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
+
+
+		/*
+		if(iter == 1)
+		{
+			sf_file sf_dcal = sf_output("dcal.rsf");
+			sf_putint(sf_dcal, "n1", nt);
+			sf_putint(sf_dcal, "n2", ng);
+			sf_floatwrite(&dcal[0], nt * ng, sf_dcal);
+			exit(1);
+		}
+		*/
 
 		/*
 		if(iter == 1 && is == 0)
@@ -374,24 +376,23 @@ void FwiFramework::epoch(int iter) {
 		fmMethod.fwiRemoveDirectArrival(&dcal[0], is);
 
     /*
-		std::vector<float> trans(nt * ng, 0.0f);
-		matrix_transpose(&encobs[0], &trans[0], ng, nt);
 		sf_file sf_encobs = sf_output("encobs2.rsf");
 		sf_putint(sf_encobs, "n1", nt);
 		sf_putint(sf_encobs, "n2", ng);
-		sf_floatwrite(&trans[0], nt * ng, sf_encobs);
+		sf_floatwrite(&encobs[0], nt * ng, sf_encobs);
     exit(1);
     */
 
-    /*
-		std::vector<float> dtrans(nt * ng, 0.0f);
-		matrix_transpose(&dcal[0], &dtrans[0], ng, nt);
-		sf_file sf_dcal = sf_output("dcal2.rsf");
-		sf_putint(sf_dcal, "n1", nt);
-		sf_putint(sf_dcal, "n2", ng);
-		sf_floatwrite(&dtrans[0], nt * ng, sf_dcal);
-    exit(1);
-    */
+		/*
+		if(iter == 1)
+		{
+			sf_file sf_dcal = sf_output("dcal2.rsf");
+			sf_putint(sf_dcal, "n1", nt);
+			sf_putint(sf_dcal, "n2", ng);
+			sf_floatwrite(&dcal[0], nt * ng, sf_dcal);
+			exit(1);
+		}
+		*/
 
 		INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
 		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
@@ -452,30 +453,34 @@ void FwiFramework::epoch(int iter) {
 		DEBUG() << format("global grad %.20f") % sum(g2);
 	}
 
-  /*
-	sf_file sf_g2 = sf_output("g2.rsf");
-	sf_putint(sf_g2, "n1", nz);
-	sf_putint(sf_g2, "n2", nx);
-	sf_floatwrite(&g2[0], nx * nz, sf_g2);
-  exit(1);
-  */
+	/*
+	if(iter == 1)
+	{
+		sf_file sf_g2 = sf_output("g2.rsf");
+		sf_putint(sf_g2, "n1", nz);
+		sf_putint(sf_g2, "n2", nx);
+		sf_floatwrite(&g2[0], nx * nz, sf_g2);
+		exit(1);
+	}
+	*/
 
   updateGrad(&g0[0], &g2[0], &updateDirection[0], g0.size(), iter);
 
-  /*
-	sf_file sf_ud = sf_output("updateDirection.rsf");
-	sf_putint(sf_ud, "n1", nz);
-	sf_putint(sf_ud, "n2", nx);
-	sf_floatwrite(&updateDirection[0], nx * nz, sf_ud);
-  exit(1);
-  */
+	/*
+	if(iter == 1)
+	{
+		sf_file sf_ud = sf_output("updateDirection.rsf");
+		sf_putint(sf_ud, "n1", nz);
+		sf_putint(sf_ud, "n2", nx);
+		sf_floatwrite(&updateDirection[0], nx * nz, sf_ud);
+	}
+	*/
 
 	float steplen;
 	float obj_val1 = 0, obj_val2 = 0, obj_val3 = 0;
 
 	updateStenlelOp.calsteplen(dobs, updateDirection, obj1, iter, steplen, updateobj);
-  INFO() << format("steplen = %.20f") % steplen;
-  exit(1);
+
 
 	float alpha1 = updateStenlelOp.alpha1;
 	float alpha2 = updateStenlelOp.alpha2;
@@ -489,12 +494,36 @@ void FwiFramework::epoch(int iter) {
 
   INFO() << format("In calculate_steplen(): iter %d  steplen (alpha4) = %e") % iter % steplen;
 
+  INFO() << format("steplen = %.20f") % steplen;
+
   Velocity &exvel = fmMethod.getVelocity();
+
+	/*
+	if(iter == 1)
+	{
+		sf_file sf_exvel = sf_output("exvel_before.rsf");
+		sf_putint(sf_exvel, "n1", nz);
+		sf_putint(sf_exvel, "n2", nx);
+		sf_floatwrite(&exvel.dat[0], nx * nz, sf_exvel);
+		exit(1);
+	}
+	*/
+
 	INFO() << format("sum vel %f") % sum(exvel.dat);
   updateVelOp.update(exvel, exvel, updateDirection, steplen);
 	INFO() << format("sum vel2 %f") % sum(exvel.dat);
 
-  fmMethod.refillBoundary(&exvel.dat[0]);
+	char f_name[64];
+	sprintf(f_name, "exvel_after%02d.rsf", iter);
+	sf_file sf_exvel2 = sf_output(f_name);
+	sf_putint(sf_exvel2, "n1", nz);
+	sf_putint(sf_exvel2, "n2", nx);
+	sf_floatwrite(&exvel.dat[0], nx * nz, sf_exvel2);
+	if(iter == 3)
+		exit(1);
+
+  //fmMethod.refillBoundary(&exvel.dat[0]);
+
 }
 
 

@@ -107,13 +107,15 @@ float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
 
   updateMethod.bindVelocity(oldVel);  //-test
   updateMethod.fwiRemoveDirectArrival(&dcal[0], shot_id);
-  updateMethod.bindVelocity(newVel);  //-test
+  //updateMethod.bindVelocity(newVel);  //-test
 
-	sf_file sf_dcal2 = sf_output("dcal2.rsf");
-	sf_putint(sf_dcal2, "n1", nt);
-	sf_putint(sf_dcal2, "n2", ng);
-	sf_floatwrite(&dcal[0], nt * ng, sf_dcal2);
+	/*
+	sf_file sf_dcal3 = sf_output("dcal3.rsf");
+	sf_putint(sf_dcal3, "n1", nt);
+	sf_putint(sf_dcal3, "n2", ng);
+	sf_floatwrite(&dcal[0], nt * ng, sf_dcal3);
   exit(1);
+	*/
 
   std::vector<float> vdiff(nt * ng, 0);
 		INFO() << "****sum encobs: " << std::accumulate((*encobs).begin(), (*encobs).begin() + ng * nt, 0.0f);
@@ -259,6 +261,41 @@ bool FwiUpdateSteplenOp::refineAlpha(const std::vector<float> &grad, float obj_v
   return toParabolicFit;
 }
 
+void FwiUpdateSteplenOp::parabola_fit(float x0, float x1, float x2, float y0, float y1, float y2, float max_alpha3, bool toParabolic, int iter, float &xmin, float &objval) {
+  float a, b, c, k;
+
+  k = 1. / ((((float)x0) - x1) * (x0 - x2) * (x1 - x2));
+  a = k * (y0 * (x1 - x2) - y1 * (x0 - x2) + y2 * (x0 - x1));
+  b =  -k * (y0 * (x1 * x1 - x2 * x2) - y1 * (x0 * x0 - x2 * x2) + y2 * (x0 * x0 - x1 * x1));
+  c = k * (y0 * x1 * x2 * (x1 - x2) - y1 * x0 * x2 * (x0 - x2) + y2 * x0 * x1 * (x0 - x1));
+
+  if (a == 0) {
+    if (b > 0.) {
+      xmin = x2;
+    } else {
+      xmin = x0 / 100;
+    }
+  } else if (a > 0.) {
+    if ((-b / (2.*a)) < 0) {
+      xmin = x1 / 100;
+    } else if ((-b / (2.*a)) < (x2 / 15.) ) {
+      xmin = -b / (2.*a);
+    } else if ((-b / (2.*a)) > x2 ) {
+      xmin = x2;
+    } else {
+      xmin = -b / (2.*a);
+    }
+  } else if (a < 0.) {
+    if ((-b / (2 * a)) < 0.5 * (x0 + x2) ) {
+      xmin = x2;
+    }
+    if ((-b / (2 * a)) > 0.5 * (x0 + x2) ) {
+      xmin = x1 / 100;
+    }
+  }
+}
+
+/*
 void FwiUpdateSteplenOp::parabola_fit(float alpha1, float alpha2, float alpha3, float obj_val1, float obj_val2, float obj_val3, float max_alpha3, bool toParabolic, int iter, float &steplen, float &objval) {
   float alpha4, obj_val4;
   if (toParabolic) {
@@ -290,6 +327,7 @@ void FwiUpdateSteplenOp::parabola_fit(float alpha1, float alpha2, float alpha3, 
   steplen = alpha4;
   objval = obj_val4;
 }
+*/
 
 void FwiUpdateSteplenOp::calsteplen(const std::vector<float> &dobs, const std::vector<float>& grad,
     float obj_val1, int iter, float &steplen, float &objval) {

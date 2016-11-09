@@ -450,10 +450,8 @@ void Damp4t10d::removeDirectArrival(const ShotPosition &allSrcPos, const ShotPos
   }
   vel_average /= nx * (gmax - gmin + 1);
 
-  /*
-  printf("vel_average: %.20f\n", vel_average);
-  exit(1);
-  */
+  //printf("vel_average: %.20f\n", vel_average);
+  //exit(1);
 
   int ng = allGeoPos.ns;
 
@@ -467,7 +465,6 @@ void Damp4t10d::removeDirectArrival(const ShotPosition &allSrcPos, const ShotPos
     int end = ((t + 2 * half_len) > nt) ? nt : (t + 2 * half_len);
 
     for (int j = start; j < end; j ++) {
-      //data[j * ng + itr] = 0.f;
       data[itr * nt + j] = 0.f;
     }
   }
