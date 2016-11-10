@@ -237,6 +237,21 @@ int main(int argc, char* argv[]) {
   std::vector<float> wlt(nt);
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
 
+	/*
+	sf_file sf_v1 = sf_output("v0_ready.rsf");
+	sf_putint(sf_v1, "n1", exvel.nz);
+	sf_putint(sf_v1, "n2", exvel.nx);
+	sf_floatwrite(const_cast<float*>(&exvel.dat[0]), exvel.nx * exvel.nz, sf_v1);
+	exit(1);
+	*/
+
+	/*
+	sf_file sf_wlt = sf_output("wlt.rsf");
+	sf_putint(sf_wlt, "n1", nt);
+	sf_floatwrite(&wlt[0], nt, sf_wlt);
+	exit(1);
+	*/
+
   std::vector<float> trans(params.ntask * params.nt * params.ng, 0);
   for(int is=rank*k; is<rank*k+ntask; is++) {
     int local_is = is - rank * k;
@@ -246,14 +261,67 @@ int main(int argc, char* argv[]) {
     std::vector<float> dobs(params.nt * params.ng, 0);
     ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
 
+		/*
+		sf_file sf_p0 = sf_input("/home/cbw/fwijob/fwi_test2/p0.rsf");
+		sf_floatread(const_cast<float*>(&p0[0]), exvel.nz * exvel.nx, sf_p0);
+		
+		sf_file sf_p1 = sf_input("/home/cbw/fwijob/fwi_test2/p1.rsf");
+		sf_floatread(const_cast<float*>(&p1[0]), exvel.nz * exvel.nx, sf_p1);
+		*/
+
     for(int it=0; it<nt; it++) {
       fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
+
+			/*
+			sf_file sf_p0 = sf_output("pp0.rsf");
+			sf_putint(sf_p0, "n1", exvel.nz);
+			sf_putint(sf_p0, "n2", exvel.nx);
+			sf_floatwrite(const_cast<float*>(&p0[0]), exvel.nz * exvel.nx, sf_p0);
+
+			sf_file sf_p1 = sf_output("pp1.rsf");
+			sf_putint(sf_p1, "n1", exvel.nz);
+			sf_putint(sf_p1, "n2", exvel.nx);
+			sf_floatwrite(const_cast<float*>(&p1[0]), exvel.nz * exvel.nx, sf_p1);
+			exit(1);
+			*/
+
       fmMethod.stepForward(&p0[0], &p1[0]);
+
+			/*
+			sf_file sf_p0 = sf_output("pp0.rsf");
+			sf_putint(sf_p0, "n1", exvel.nz);
+			sf_putint(sf_p0, "n2", exvel.nx);
+			sf_floatwrite(const_cast<float*>(&p0[0]), exvel.nz * exvel.nx, sf_p0);
+
+			sf_file sf_p1 = sf_output("pp1.rsf");
+			sf_putint(sf_p1, "n1", exvel.nz);
+			sf_putint(sf_p1, "n2", exvel.nx);
+			sf_floatwrite(const_cast<float*>(&p1[0]), exvel.nz * exvel.nx, sf_p1);
+			exit(1);
+			*/
+
       std::swap(p1, p0);
       fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
     }
 
+		/*
+		sf_file sf_dcal0 = sf_output("dcal.rsf");
+		sf_putint(sf_dcal0, "n1", ng);
+		sf_putint(sf_dcal0, "n2", nt);
+		sf_floatwrite(const_cast<float*>(&dobs[0]), ng * nt, sf_dcal0);
+		exit(1);
+		*/
+
     matrix_transpose(&dobs[0], &trans[local_is * ng * nt], ng, nt);
+
+		/*
+		sf_file sf_dcal0 = sf_output("dcal.rsf");
+		sf_putint(sf_dcal0, "n1", nt);
+		sf_putint(sf_dcal0, "n2", ng);
+		sf_floatwrite(const_cast<float*>(&trans[0]), ng * nt, sf_dcal0);
+		exit(1);
+		*/
+		
 		if(np == 1) {
 			sf_floatwrite(&trans[local_is * ng * nt], ng*nt, params.shots);
 		}
