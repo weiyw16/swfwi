@@ -322,7 +322,6 @@ void FwiFramework::epoch(int iter) {
 
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
 
-
 		/*
 		if(iter == 1)
 		{

@@ -65,6 +65,12 @@ public: // parameters from input files
   int jsz;
   int jgx;
   int jgz;
+
+public:
+  int rank;
+  int k;
+  int np;
+  int ntask; /// exactly the # of task each process owns
 };
 
 Params::Params() {
@@ -125,6 +131,11 @@ Params::Params() {
   sf_putfloat(norobjs, "o1", 1);
   sf_putstring(norobjs, "label1", "Normalize");
 
+  MPI_Comm_size(MPI_COMM_WORLD, &np);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  k = std::ceil(nsample * 1.0 / np);
+  ntask = std::min(k, nsample - rank*k);
+
   check();
 }
 
@@ -148,6 +159,7 @@ void Params::check() {
 
 
 int main(int argc, char *argv[]) {
+	MPI_Init(&argc, &argv);
   sf_init(argc, argv);                /* initialize Madagascar */
   Environment::setDatapath();
   Params params;
@@ -214,5 +226,6 @@ int main(int argc, char *argv[]) {
 
   sf_close();
 
+  MPI_Finalize();
   return 0;
 }
