@@ -14,13 +14,31 @@ def run_fm(task, fmbin):
     submit_cmd = '''/usr/sw-cluster/slurm-14.11.3/bin/srun
     -n 1 -p q_x86_bio '''
   else:
-    submit_cmd = '~/soft/mpich-3.1.4/bin/mpirun -np 4 '
+    submit_cmd = '~/soft/mpich-3.1.4/bin/mpirun -np 1 '
 #}}}
   Flow('shots', 'vel', submit_cmd + '''%s
     vinit=${SOURCES[0]} shots=${TARGETS[0]}
     fm=10 amp=1 dt=0.0015 ns=47 ng=461 nt=2000 nb=30
     sxbeg=0 szbeg=6 jsx=10 jsz=0 gxbeg=0 gzbeg=6 jgx=1 jgz=0
     ''' % (fmbin), stdout=-1, stdin=0)
+
+def run_born(task, bornbin):
+  # setup submit_cmd#{{{
+  if task == 'born-sw':
+    submit_cmd = '''/usr/sw-mpp/bin/bsub -I -b -m 1 -p -q %s
+    -host_stack 1024 -share_size 7000 -n 1 -cgsp 64
+    -o bsub.out -J "fm" ''' % sw_queue
+  elif task == 'born-swintel':
+    submit_cmd = '''/usr/sw-cluster/slurm-14.11.3/bin/srun
+    -n 1 -p q_x86_bio '''
+  else:
+    submit_cmd = '~/soft/mpich-3.1.4/bin/mpirun -np 1 '
+#}}}
+  Flow('shots', 'smvel vel', submit_cmd + '''%s
+    vinit=${SOURCES[0]} vreal=${SOURCES[1]} shots=${TARGETS[0]} 
+    fm=10 amp=1 dt=0.0015 ns=47 ng=461 nt=2000 nb=30
+    sxbeg=0 szbeg=6 jsx=10 jsz=0 gxbeg=0 gzbeg=6 jgx=1 jgz=0
+    ''' % (bornbin), stdout=-1, stdin=0)
 
 def run_fwi(task, fwibin):
   # setup submit_cmd#{{{
@@ -32,7 +50,7 @@ def run_fwi(task, fwibin):
     submit_cmd = '''/usr/sw-cluster/slurm-14.11.3/bin/srun
     -n 1 -p q_x86_bio '''
   else:
-    submit_cmd = ''
+    submit_cmd = '~/soft/mpich-3.1.4/bin/mpirun -np 1 '
 #}}}
   Flow('vsnaps absobjs norobjs', 'smvel shots', submit_cmd + '''%s
     vin=${SOURCES[0]} shots=${SOURCES[1]}
@@ -152,6 +170,7 @@ essfwibin = bindir + 'essfwi-damp'
 enfwibin  = bindir + 'enfwi-damp'
 normbin   = bindir + 'norm'
 noisebin  = bindir + 'noise'
+bornbin     = bindir + 'born'
 #}}}
 
 # possible option:
@@ -161,6 +180,11 @@ task = str(ARGUMENTS.get('task'))
 if 'fm' in task:
   run_fm(task, fmbin)
   Plot('shots','grey color=g title=shot label2= unit2=', view=0)
+elif 'born' in task:
+  run_born(task, bornbin)
+  Plot('shots','grey color=g title=shot label2= unit2=', view=0)
+  Plot('shots_real','grey color=g title=shot label2= unit2=', view=0)
+  Plot('ad_shots','grey color=g title=shot label2= unit2=', view=0)
 elif 'cfwi' in task:
   run_fwi(task, fwibin)
 elif 'essfwi' in task:
@@ -180,5 +204,16 @@ if 'fwi' in str(task):
   plotcurve('l1norm', 'l1norm')
   plotcurve('l2norm', 'l2norm')
 #}}}
+
+if 'born' in str(task):
+	Flow('shot0_real', 'shots_real', '''
+				window f3=0 n3=1''', stdout=-1, stdin=0)
+#plotcurve('shot0_real', 'shot0_real')
+#	Flow('shot0', 'shots', '''
+#				window f3=0 n3=1''', stdout=-1, stdin=0)
+#  plotcurve('shot0', 'shot0')
+#	Flow('ad_shot0', 'ad_shots', '''
+#				window f3=0 n3=1''', stdout=-1, stdin=0)
+#  plotcurve('ad_shot0', 'ad_shot0')
 
 End()
