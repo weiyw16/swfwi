@@ -133,8 +133,8 @@ Params::Params() {
 
   MPI_Comm_size(MPI_COMM_WORLD, &np);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  k = std::ceil(nsample * 1.0 / np);
-  ntask = std::min(k, nsample - rank*k);
+  k = std::ceil(ns * 1.0 / np);
+  ntask = std::min(k, ns - rank*k);
 
   check();
 }
@@ -165,7 +165,8 @@ int main(int argc, char *argv[]) {
   Params params;
 
   /// configure logger
-  const char *logfile = "fwi-damp.log";
+	char logfile[64];
+	sprintf(logfile, "fwi-damp-%02d.log", params.rank);
   FILELog::setLogFile(logfile);
 
   int nz = params.nz;
