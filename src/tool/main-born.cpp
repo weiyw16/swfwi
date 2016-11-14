@@ -34,9 +34,7 @@ private:
 public:
   sf_file vinit;
   sf_file vreal;
-  sf_file shots_real;
   sf_file shots;
-  sf_file ad_shots;
   int nb;
   int nz;
   int nx;
@@ -70,8 +68,6 @@ Params::Params() {
   vinit=sf_input ("vinit");   /* initial velocity model, unit=m/s */
   vreal=sf_input ("vreal");   /* initial velocity model, unit=m/s */
   shots=sf_output("shots");
-  shots_real=sf_output("shots_real.rsf");
-  ad_shots=sf_output("ad_shots.rsf");
 
   /* get parameters for forward modeling */
   if (!sf_histint(vinit,"n1",&nz)) sf_error("no n1");
@@ -172,22 +168,6 @@ Params::Params() {
   sf_putint(shots,"jgz",jgz);
   sf_putint(shots, "nb", nb);
 
-  sf_putint(shots_real,"n1",nt);
-  sf_putint(shots_real,"n2",ng);
-  sf_putint(shots_real,"n3",ns);
-  sf_putfloat(shots_real,"d1",dt);
-  sf_putfloat(shots_real,"d2",jgx*dx);
-  sf_putfloat(shots_real,"o1",0);
-  sf_putfloat(shots_real,"o2",0);
-
-  sf_putint(ad_shots,"n1",nt);
-  sf_putint(ad_shots,"n2",ng);
-  sf_putint(ad_shots,"n3",ns);
-  sf_putfloat(ad_shots,"d1",dt);
-  sf_putfloat(ad_shots,"d2",jgx*dx);
-  sf_putfloat(ad_shots,"o1",0);
-  sf_putfloat(ad_shots,"o2",0);
-
   Velocity v = SfVelocityReader::read(vinit, nx, nz);
   float vmin = *std::min_element(v.dat.begin(), v.dat.end());
   float vmax = *std::max_element(v.dat.begin(), v.dat.end());
@@ -258,13 +238,13 @@ int main(int argc, char* argv[]) {
 	for(int i = 0 ; i < exvel.nx * exvel.nz ; i ++)
 		exvel_m[i] = exvel.dat[i] - exvel_real.dat[i];
 
-  fmMethod.bindVelocity(exvel_real);
+  fmMethod.bindVelocity(exvel);
 
   std::vector<float> wlt(nt);
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
 
   std::vector<float> trans(params.ntask * params.nt * params.ng, 0);
-  std::vector<float> ad_trans(params.ntask * params.nt * params.ng, 0);
+  std::vector<float> fullwv(nt * exvel.nz * exvel.nx, 0);
   for(int is=rank*k; is<rank*k+ntask; is++) {
     int local_is = is - rank * k;
     Timer timer;
@@ -273,62 +253,36 @@ int main(int argc, char* argv[]) {
     std::vector<float> dobs(params.nt * params.ng, 0);
     ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
 
+
     for(int it=0; it<nt; it++) {
       fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
       std::swap(p1, p0);
-      fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
+			std::copy(p1.begin(), p1.end(), &fullwv[it * nz * nx]);
+      //fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
 		}
-		
-    matrix_transpose(&dobs[0], &trans[local_is * ng * nt], ng, nt);
-		if(np == 1) {
-			sf_floatwrite(&trans[local_is * ng * nt], ng*nt, params.shots_real);
-		}
-		else {
-			if(rank == 0) {
-				sf_floatwrite(&trans[local_is * ng * nt], ng*nt, params.shots_real);
-				printf("trans[0] = %f\n", trans[local_is * ng * nt]);
-				if(is == rank * k + ntask - 1) {
-					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
-						MPI_Recv(&trans[0], ng*nt, MPI_FLOAT, other_is / k, other_is, MPI_COMM_WORLD, &status);
-						sf_floatwrite(&trans[0], ng*nt, params.shots_real);
-					}
-				}
+
+    for(int it=0; it<nt; it++) {
+			if(it == 0) {
+				for(int i = 0 ; i < nx ; i ++)
+					for(int j = 0 ; j < nz ; j ++)
+						p0[i * nz + j] += 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - fullwv[it * nx * nz + i * nz + j]) / sqrt(exvel.dat[i * nz + j]) * exvel_m[i * nz + j] / dt;
+			}
+			else if(it == nt - 1) {
+				for(int i = 0 ; i < nx ; i ++)
+					for(int j = 0 ; j < nz ; j ++)
+						p0[i * nz + j] += 2 * (fullwv[it * nx * nz + i * nz + j] - fullwv[(it - 1) * nx * nz + i * nz + j]) / sqrt(exvel.dat[i * nz + j]) * exvel_m[i * nz + j] / dt;
 			}
 			else {
-				MPI_Isend(&trans[local_is * ng * nt], ng*nt, MPI_FLOAT, 0, is, MPI_COMM_WORLD, &request);
+				for(int i = 0 ; i < nx ; i ++)
+					for(int j = 0 ; j < nz ; j ++)
+						p0[i * nz + j] += 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - 2 * fullwv[it * nx * nz + i * nz + j] + fullwv[(it - 1) * nx * nz + i * nz + j]) / sqrt(exvel.dat[i * nz + j]) * exvel_m[i * nz + j] / dt;
 			}
-		}
-    INFO() << format("shot %d, elapsed time %fs") % is % timer.elapsed();
-	}
-  INFO() << format("total elapsed time %fs") % totalTimer.elapsed();
-	MPI_Barrier(MPI_COMM_WORLD);
-
-  for(int is=rank*k; is<rank*k+ntask; is++) {
-    int local_is = is - rank * k;
-    Timer timer;
-    std::vector<float> p0(exvel.nz * exvel.nx, 0);
-    std::vector<float> p1(exvel.nz * exvel.nx, 0);
-    std::vector<float> dobs(params.nt * params.ng, 0);
-
-    std::vector<float> ad_p0(exvel.nz * exvel.nx, 0);
-    std::vector<float> ad_p1(exvel.nz * exvel.nx, 0);
-    std::vector<float> ad_dobs(params.nt * params.ng, 0);
-    ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
-
-		fmMethod.bindVelocity(exvel);
-    for(int it=0; it<nt; it++) {
-      fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
+      //fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
       std::swap(p1, p0);
       fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
 
-      fmMethod.addSource(&ad_p1[0], &wlt[it], curSrcPos);
-      fmMethod.stepForward(&ad_p0[0], &ad_p1[0]);
-      std::swap(ad_p1, ad_p0);
-			for(int i = 0 ; i < exvel.nx * exvel.nz ; i ++)
-				ad_p1[i] *= exvel_m[i];
-      fmMethod.recordSeis(&ad_dobs[it*ng], &ad_p0[0]);
     }
 
     matrix_transpose(&dobs[0], &trans[local_is * ng * nt], ng, nt);
@@ -348,26 +302,6 @@ int main(int argc, char* argv[]) {
 			}
 			else {
 				MPI_Isend(&trans[local_is * ng * nt], ng*nt, MPI_FLOAT, 0, is, MPI_COMM_WORLD, &request);
-			}
-		}
-
-    matrix_transpose(&ad_dobs[0], &ad_trans[local_is * ng * nt], ng, nt);
-		if(np == 1) {
-			sf_floatwrite(&ad_trans[local_is * ng * nt], ng*nt, params.ad_shots);
-		}
-		else {
-			if(rank == 0) {
-				sf_floatwrite(&ad_trans[local_is * ng * nt], ng*nt, params.ad_shots);
-				printf("trans[0] = %f\n", ad_trans[local_is * ng * nt]);
-				if(is == rank * k + ntask - 1) {
-					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
-						MPI_Recv(&ad_trans[0], ng*nt, MPI_FLOAT, other_is / k, other_is + 1000, MPI_COMM_WORLD, &status);
-						sf_floatwrite(&ad_trans[0], ng*nt, params.ad_shots);
-					}
-				}
-			}
-			else {
-				MPI_Isend(&ad_trans[local_is * ng * nt], ng*nt, MPI_FLOAT, 0, is + 1000, MPI_COMM_WORLD, &request);
 			}
 		}
 

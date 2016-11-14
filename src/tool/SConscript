@@ -3,6 +3,7 @@ Import('*')
 
 bin_list = [
 ("fwi-damp", "main-fwi-damp.cpp"),
+("fti-damp", "main-fti-damp.cpp"),
 ("essfwi-damp", "main-essfwi-damp.cpp"),
 ("enfwi-damp", "main-enfwi-damp.cpp"),
 ("norm", "main-norm.cpp"),
