@@ -1,4 +1,6 @@
 #include "random-code.h"
+#include "logger.h"
+#include <numeric>
 RandomCodes::RandomCodes(int seed) :
   generator(seed), codes_gen(generator, distribution_type(0, 1)), codes(&codes_gen)
 {
@@ -13,14 +15,23 @@ int RandomCodes::nextRand() {
 }
 
 std::vector<int> RandomCodes::genPlus1Minus1(int nshots) {
+	if(nshots % 2 != 0) {
+		printf("Error! nshots must be an even number");
+		exit(1);
+	}
   std::vector<int> codes(nshots);
-  for (int i = 0; i < nshots; i++) {
-    codes[i] = nextRand();
-  }
+	while(true) {
+		int sum = 0;
+		for (int i = 0; i < nshots; i++) {
+			codes[i] = nextRand();
+			sum += codes[i];
+		}
+		if(sum == 0)
+			break;
+	}
 
   return codes;
 }
-
 
 /*
 int main()
@@ -34,6 +45,7 @@ int main()
     std::cout << essfwi_codes[i] << " ";
   }
   std::cout << std::endl;
+	std::cout << std::accumulate(essfwi_codes.begin(), essfwi_codes.end(), 0.0f) << std::endl;
 
   RandomCodes r2(seed);
   std::vector<int> essfwi_codes_2 = r2.genPlus1Minus1(nshots);
@@ -42,6 +54,7 @@ int main()
     std::cout << essfwi_codes_2[i] << " ";
   }
   std::cout << std::endl;
+	std::cout << std::accumulate(essfwi_codes_2.begin(), essfwi_codes_2.end(), 0.0f) << std::endl;
 
   //////////////////////// another instance use different seeds /////////////////
   seed = 2;
