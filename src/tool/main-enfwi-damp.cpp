@@ -412,6 +412,7 @@ int main(int argc, char *argv[]) {
   /// configure logger
   std::string logfile = std::string("enfwi-damp-") + boost::lexical_cast<std::string>(params.rank) + ".log";
   FILELog::setLogFile(logfile);
+	printGitInfo();
 
   int nz = params.nz;
   int nx = params.nx;

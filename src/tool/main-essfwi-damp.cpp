@@ -11,6 +11,7 @@ extern "C" {
 #include <cmath>
 
 #include "logger.h"
+#include "common.h"
 #include "shot-position.h"
 #include "damp4t10d.h"
 #include "sf-velocity-reader.h"
@@ -150,6 +151,7 @@ int main(int argc, char *argv[]) {
   /// configure logger
   const char *logfile = "essfwi-damp.log";
   FILELog::setLogFile(logfile);
+	printGitInfo();
 
   int nz = params.nz;
   int nx = params.nx;

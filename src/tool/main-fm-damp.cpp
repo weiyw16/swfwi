@@ -212,6 +212,7 @@ int main(int argc, char* argv[]) {
 
   /// configure logger
   FILELog::setLogFile("fm-damp.log");
+	printGitInfo();
 
   int nz = params.nz;
   int nx = params.nx;

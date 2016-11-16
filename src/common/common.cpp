@@ -8,6 +8,8 @@
 extern "C" {
 #include <rsf.h>
 }
+#include <stdio.h>
+#include <string.h>
 #include "common.h"
 #include "logger.h"
 
@@ -365,4 +367,34 @@ void bell_smoothx(const float *g, float *smg, int rbell, int nz, int nx)
       }
       smg[ix * nz + iz] = s;
     }
+}
+
+void executeCMD(const char *cmd, char *result)
+{
+	char buf_ps[1024];
+	char ps[1024]={0};
+	FILE *ptr;
+	strcpy(ps, cmd);
+	if((ptr=popen(ps, "r"))!=NULL)
+	{
+		while(fgets(buf_ps, 1024, ptr)!=NULL)
+		{
+			strcat(result, buf_ps);
+			if(strlen(result)>1024)
+			break;
+		}
+		pclose(ptr);
+		ptr = NULL;
+	}
+	else
+	{
+		printf("popen %s error\n", ps);
+	}
+}
+
+void printGitInfo()
+{
+	char result[1024] = "\0";
+	executeCMD( "git log --oneline --decorate | head -n 2", result);
+	INFO() << format("\nCurrent git info: \n%s\n") % result;
 }

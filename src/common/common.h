@@ -83,5 +83,7 @@ void bell_smoothz(const float *g, float *smg, int rbell, int nz, int nx);
 void bell_smoothx(const float *g, float *smg, int rbell, int nz, int nx);
 float cal_alpha(const float *alpha1, const float *alpha2, float epsil, int ng);
 void update_vel(float *vv, const float *cg, float alpha, int nz, int nx);
+void executeCMD(const char *cmd, char *result);
+void printGitInfo();
 
 #endif /* SRC_COMMON_COMMON_H_ */
