@@ -16,6 +16,7 @@ extern "C" {
 #include <functional>
 
 #include "logger.h"
+#include "common.h"
 #include "shot-position.h"
 #include "damp4t10d.h"
 #include "sf-velocity-reader.h"

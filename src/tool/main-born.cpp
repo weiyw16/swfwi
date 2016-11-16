@@ -9,6 +9,7 @@ extern "C" {
 
 #include "mpi.h"
 #include "logger.h"
+#include "common.h"
 #include "sum.h"
 #include "ricker-wavelet.h"
 #include "velocity.h"
