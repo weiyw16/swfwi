@@ -199,7 +199,7 @@ void EnkfAnalyze::pAnalyze(std::vector<float *> &velSet, Matrix &lambdaSet, Matr
   float lambdaX = 0;
   float lambdaZ = 0;
   TRACE() << "updating lamdaset";
-  for (int i = 0; i < N; i++) {
+  for (int i = 0; i < local_n; i++) {
     ReguFactor fac(velSet[i], nx, nz, lambdaX, lambdaZ);
     Matrix::value_type *pLambda = lambdaSet.getData() + i * lambdaSet.getNumRow();
     Matrix::value_type *pRatio  = ratioSet.getData()  + i * ratioSet.getNumRow();
