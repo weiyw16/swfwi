@@ -386,10 +386,6 @@ Matrix EnkfAnalyze::pCalGainMatrix(const std::vector<float*>& velSet, std::vecto
 	int nSamples = N;
 	MPI_Bcast(&nSamples, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	if(code.size() == 0)
-	{
-		std::vector<int> code = enkfRandomCodes.genPlus1Minus1(fm.getns());
-	}
   MPI_Bcast(&code[0], code.size(), MPI_INT, 0, MPI_COMM_WORLD);   /// broadcast the code to all other processes
 
   Matrix local_HOnA(local_n, numDataSamples);

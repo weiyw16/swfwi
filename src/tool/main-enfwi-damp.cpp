@@ -575,7 +575,7 @@ int main(int argc, char *argv[]) {
     TRACE() << "FWI for each velocity";
     DEBUG() << "\n\n\n\n\n\n\n";
 
-    for (size_t ivel = 0; ivel < essfwis.size(); ivel++) {
+    for (size_t ivel = 0; ivel < essfwis.size(); ivel++)		{
       int absvel = rank * k + ivel + 1;
       INFO() << format("iter %d, rank %d on %dth velocity, sum %f") % iter % rank % absvel % sum(veldb[ivel]->dat);
       double lambdaX = lambdaSet.getData()[ivel * lambdaSet.getNumRow()];
