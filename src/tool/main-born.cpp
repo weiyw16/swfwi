@@ -20,6 +20,7 @@ extern "C" {
 #include "sfutil.h"
 #include "timer.h"
 #include "environment.h"
+#include "math.h"
 
 namespace {
 class Params {
@@ -236,9 +237,55 @@ int main(int argc, char* argv[]) {
 
   Velocity exvel = fmMethod.expandDomain(SfVelocityReader::read(params.vinit, nx, nz));
   Velocity exvel_real = fmMethod.expandDomain(SfVelocityReader::read(params.vreal, nx, nz));
+
+  Velocity exvel_origin = fmMethod.expandDomain_notrans(SfVelocityReader::read(params.vinit, nx, nz));
+  Velocity exvel_real_origin = fmMethod.expandDomain_notrans(SfVelocityReader::read(params.vreal, nx, nz));
+
+#ifdef dot_product_test
+  fmMethod.bindVelocity(exvel);
+
+  std::vector<float> wlt(nt);
+  rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
+
+  std::vector<float> trans(params.ntask * params.nt * params.ng, 0);
+  std::vector<float> fullwv(nt * exvel.nz * exvel.nx, 0);
+
+	std::vector<float> p0(exvel.nz * exvel.nx, 0);
+	std::vector<float> p1(exvel.nz * exvel.nx, 0);
+	std::vector<float> dobs(params.nt * params.ng, 0);
+	ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
+
+	std::vector<float> rand1(params.nt * params.ns, 0);
+	std::vector<float> rand2(params.nt * params.ng, 0);
+	
+	for(int it=0; it<nt; it++) {
+		fmMethod.addSource(&p1[0], &rand1[it * ns], allSrcPos);
+		fmMethod.stepForward(&p0[0], &p1[0]);
+		std::swap(p1, p0);
+		fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
+	}
+
+	p0.assign(exvel.nz * exvel.nx, 0);
+	p1.assign(exvel.nz * exvel.nx, 0);
+	dobs.assign(params.nt * params.ng, 0);
+	for(int it=0; it<nt; it++) {
+		fmMethod.addSource(&p1[0], &rand2[it * ng], allGeoPos);
+		fmMethod.stepForward(&p0[0], &p1[0]);
+		std::swap(p1, p0);
+		fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
+	}
+	
+#endif 
+
+#define gradient_test
+#ifdef gradient_test
 	std::vector<float> exvel_m(exvel.nx * exvel.nz, 0);
-	for(int i = 0 ; i < exvel.nx * exvel.nz ; i ++)
-		exvel_m[i] = exvel.dat[i] - exvel_real.dat[i];
+	for(int i = 0 ; i < exvel.nx * exvel.nz ; i ++) {
+		//exvel_origin[i] = params.dx * params.dx / (dt * dt * exvel.dat[i] * exvel.dat[i]);
+		//exvel_real_origin[i] = params.dx * params.dx / (dt * dt * exvel_real.dat[i] * exvel_real.dat[i]);
+		//exvel_m[i] = exvel_real_origin.dat[i] - exvel_origin.dat[i];
+		exvel_m[i] = exvel_real.dat[i] - exvel.dat[i];
+	}
 
   fmMethod.bindVelocity(exvel);
 
@@ -260,7 +307,7 @@ int main(int argc, char* argv[]) {
       fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
       std::swap(p1, p0);
-			std::copy(p1.begin(), p1.end(), &fullwv[it * nz * nx]);
+			std::copy(p0.begin(), p0.end(), &fullwv[it * nz * nx]);
       //fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
 		}
 
@@ -268,17 +315,17 @@ int main(int argc, char* argv[]) {
 			if(it == 0) {
 				for(int i = 0 ; i < nx ; i ++)
 					for(int j = 0 ; j < nz ; j ++)
-						p0[i * nz + j] += 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - fullwv[it * nx * nz + i * nz + j]) / sqrt(exvel.dat[i * nz + j]) * exvel_m[i * nz + j] / dt;
+						p1[i * nz + j] += 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - fullwv[it * nx * nz + i * nz + j]) / exvel.dat[i * nz + j] * exvel_m[i * nz + j] / dt;
 			}
 			else if(it == nt - 1) {
 				for(int i = 0 ; i < nx ; i ++)
 					for(int j = 0 ; j < nz ; j ++)
-						p0[i * nz + j] += 2 * (fullwv[it * nx * nz + i * nz + j] - fullwv[(it - 1) * nx * nz + i * nz + j]) / sqrt(exvel.dat[i * nz + j]) * exvel_m[i * nz + j] / dt;
+						p1[i * nz + j] += 2 * (fullwv[it * nx * nz + i * nz + j] - fullwv[(it - 1) * nx * nz + i * nz + j]) / exvel.dat[i * nz + j] * exvel_m[i * nz + j] / dt;
 			}
 			else {
 				for(int i = 0 ; i < nx ; i ++)
 					for(int j = 0 ; j < nz ; j ++)
-						p0[i * nz + j] += 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - 2 * fullwv[it * nx * nz + i * nz + j] + fullwv[(it - 1) * nx * nz + i * nz + j]) / sqrt(exvel.dat[i * nz + j]) * exvel_m[i * nz + j] / dt;
+						p1[i * nz + j] -= 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - 2 * fullwv[it * nx * nz + i * nz + j] + fullwv[(it - 1) * nx * nz + i * nz + j]) / exvel.dat[i * nz + j] * exvel_m[i * nz + j];
 			}
       //fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
@@ -311,6 +358,7 @@ int main(int argc, char* argv[]) {
   }
 
   INFO() << format("total elapsed time %fs") % totalTimer.elapsed();
+#endif
 
   MPI_Finalize();
   return 0;

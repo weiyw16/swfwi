@@ -20,6 +20,7 @@ public:
   Damp4t10d(const ShotPosition &allSrcPos, const ShotPosition &allGeoPos, float dt, float dx, float fm, int nb, int nt);
 
   Velocity expandDomain(const Velocity &vel);
+  Velocity expandDomain_notrans(const Velocity &vel);
 
 
   void stepForward(float *p0, float *p1) const;

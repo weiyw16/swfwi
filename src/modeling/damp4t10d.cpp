@@ -135,6 +135,45 @@ static void recoverVel(std::vector<float> &vel, float dx, float dt) {
   }
 }
 
+Velocity Damp4t10d::expandDomain_notrans(const Velocity& _vel) {
+  // expand for boundary, free surface
+  int nb = bx0 - EXFDBNDRYLEN;
+  Velocity exvelForBndry(_vel.nx + 2 * nb, _vel.nz + nb);
+  expandBndry(exvelForBndry, _vel, nb);
+
+	/*
+	sf_file sf_v1 = sf_output("v0_bndry.rsf");
+	sf_putint(sf_v1, "n1", _vel.nz + nb);
+	sf_putint(sf_v1, "n2", _vel.nx + 2 * nb);
+	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + nb) * (_vel.nx + 2 * nb), sf_v1);
+	exit(1);
+	*/
+
+  //transvel(exvelForBndry.dat, dx, dt);
+
+	/*
+	sf_file sf_v1 = sf_output("v0_before.rsf");
+	sf_putint(sf_v1, "n1", _vel.nz + nb);
+	sf_putint(sf_v1, "n2", _vel.nx + 2 * nb);
+	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + nb) * (_vel.nx + 2 * nb), sf_v1);
+	exit(1);
+	*/
+
+  // expand for stencil
+  Velocity ret(exvelForBndry.nx+2*EXFDBNDRYLEN, exvelForBndry.nz+2*EXFDBNDRYLEN);
+  expandForStencil(ret, exvelForBndry, EXFDBNDRYLEN);
+
+	/*
+	sf_file sf_v1 = sf_output("v0_after.rsf");
+	sf_putint(sf_v1, "n1", ret.nz);
+	sf_putint(sf_v1, "n2", ret.nx);
+	sf_floatwrite(const_cast<float*>(&ret.dat[0]), ret.nx * ret.nz, sf_v1);
+	exit(1);
+	*/
+
+  return ret;
+}
+
 Velocity Damp4t10d::expandDomain(const Velocity& _vel) {
   // expand for boundary, free surface
   int nb = bx0 - EXFDBNDRYLEN;

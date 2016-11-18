@@ -230,17 +230,12 @@ void EssFwiFramework::epoch(int iter, float lambdaX, float lambdaZ) {
     }
 
 
-  //printf("check a\n");
   transVsrc(vsrc, nt, ng);
-  //printf("check b\n");
 
   std::vector<float> g1(nx * nz, 0);
-  //printf("check c\n");
   calgradient(fmMethod, encsrc, vsrc, g1, nt, dt);
-  //printf("check d\n");
 
   DEBUG() << format("grad %.20f") % sum(g1);
-  //printf("check e\n");
 
   fmMethod.scaleGradient(&g1[0]);
   fmMethod.maskGradient(&g1[0]);
