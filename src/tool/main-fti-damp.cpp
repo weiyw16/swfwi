@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
 
   /// configure logger
 	char logfile[64];
-	sprintf(logfile, "fwi-damp-%02d.log", params.rank);
+	sprintf(logfile, "fti-damp-%02d.log", params.rank);
   FILELog::setLogFile(logfile);
 	printGitInfo();
 

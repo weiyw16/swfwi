@@ -215,7 +215,9 @@ int main(int argc, char* argv[]) {
   Timer totalTimer;
 
   /// configure logger
-  FILELog::setLogFile("fm-damp.log");
+	char logfile[64];
+	sprintf(logfile, "born-damp-%02d.log", params.rank);
+  FILELog::setLogFile(logfile);
 	printGitInfo();
 
   int nz = params.nz;
