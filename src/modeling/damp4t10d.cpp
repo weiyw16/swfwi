@@ -213,6 +213,31 @@ Velocity Damp4t10d::expandDomain(const Velocity& _vel) {
   return ret;
 }
 
+void Damp4t10d::addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullwv_t2, const float *exvel_m, float dt, int it, float *rp1) const {
+	int nx = vel->nx;
+	int nz = vel->nz;
+
+	if(it == 0) {
+		for(int i = bx0 ; i < nx - bxn ; i ++)
+			for(int j = bz0 ; j < nz - bzn ; j ++)
+				rp1[i * nz + j] += 2 * (fullwv_t2[i * nz + j] - fullwv_t1[i * nz + j]) / vel->dat[i * nz + j] * exvel_m[i * nz + j] / dt;
+	}
+	else if(it == nt - 1) {
+		/*
+		for(int i = 0 ; i < nx ; i ++)
+			for(int j = 0 ; j < nz ; j ++)
+			*/
+		for(int i = bx0 ; i < nx - bxn ; i ++)
+			for(int j = bz0 ; j < nz - bzn ; j ++)
+				rp1[i * nz + j] += 2 * (fullwv_t1[i * nz + j] - fullwv_t0[i * nz + j]) / vel->dat[i * nz + j] * exvel_m[i * nz + j] / dt;
+	}
+	else {
+		for(int i = bx0 ; i < nx - bxn ; i ++)
+			for(int j = bz0 ; j < nz - bzn ; j ++)
+				rp1[i * nz + j] -= 2 * (fullwv_t2[i * nz + j] - 2 * fullwv_t1[i * nz + j] + fullwv_t0[i * nz + j]) / vel->dat[i * nz + j] * exvel_m[i * nz + j];
+	}
+}
+
 void Damp4t10d::stepForward(float* p0, float* p1) const {
   static std::vector<float> u2(vel->nx * vel->nz, 0);
 
@@ -434,6 +459,43 @@ void Damp4t10d::FwiForwardModeling(const std::vector<float>& encSrc,
   exit(1);
   */
 
+}
+
+void Damp4t10d::BornForwardModeling(const std::vector<float> &exvel_m, const std::vector<float>& encSrc,
+    std::vector<float>& dcal, int shot_id) const {
+  int nx = getnx();
+  int nz = getnz();
+  int ns = getns();
+  int ng = getng();
+
+  std::vector<float> fullwv(3 * nz * nx, 0);
+  std::vector<float> p0(nz * nx, 0);
+  std::vector<float> p1(nz * nx, 0);
+  std::vector<float> rp0(nz * nx, 0);
+  std::vector<float> rp1(nz * nx, 0);
+	float *fullwv_t0, *fullwv_t1, *fullwv_t2, *fullwv_t;	
+	fullwv_t0 = &fullwv[0];
+	fullwv_t1 = &fullwv[nz * nx];
+	fullwv_t2 = &fullwv[2 * nz * nx];
+
+  ShotPosition curSrcPos = allSrcPos->clipRange(shot_id, shot_id);
+	int it = 0;
+	for(int it0 = 0 ; it0 < nt + 1 ; it0 ++) {
+		addSource(&p1[0], &encSrc[it0], curSrcPos);
+		stepForward(&p0[0], &p1[0]);
+		std::swap(p1, p0);
+		swap3(fullwv_t0, fullwv_t1, fullwv_t2);
+		std::copy(p0.begin(), p0.end(), fullwv_t2);
+
+		it = it0 - 1;
+		if(it < 0) 
+			continue;
+		addBornwv(fullwv_t0, fullwv_t1, fullwv_t2, &exvel_m[0], dt, it, &rp1[0]);
+		//fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
+		stepForward(&rp0[0], &rp1[0]);
+		std::swap(rp1, rp0);
+		recordSeis(&dcal[it*ng], &rp0[0]);
+	}
 }
 
 void Damp4t10d::EssForwardModeling(const std::vector<float>& encSrc,

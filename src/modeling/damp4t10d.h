@@ -23,6 +23,7 @@ public:
   Velocity expandDomain_notrans(const Velocity &vel);
 
 
+	void addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullwv_t2, const float *exvel_m, float dt, int it, float *rp1) const;
   void stepForward(float *p0, float *p1) const;
   void stepBackward(float *p0, float *p1) const;
   void bindVelocity(const Velocity &_vel);
@@ -47,6 +48,7 @@ public:
 
   void FwiForwardModeling(const std::vector<float> &encsrc, std::vector<float> &dcal, int shot_id) const;
   void EssForwardModeling(const std::vector<float> &encsrc, std::vector<float> &dcal) const;
+	void BornForwardModeling(const std::vector<float>& exvel, const std::vector<float>& encSrc, std::vector<float>& dcal, int shot_id) const;
 
 public:
   const Velocity &getVelocity() const;

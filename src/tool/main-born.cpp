@@ -280,9 +280,7 @@ int main(int argc, char* argv[]) {
 #define gradient_test
 #ifdef gradient_test
 	std::vector<float> exvel_m(nx * nz, 0);
-	for(int i = 0 ; i < nx * nz ; i ++) {
-		exvel_m[i] = exvel_real.dat[i] - exvel.dat[i];
-	}
+	vectorMinus(exvel_real.dat, exvel.dat, exvel_m);
 
   fmMethod.bindVelocity(exvel);
 
@@ -290,54 +288,37 @@ int main(int argc, char* argv[]) {
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
 
   std::vector<float> trans(params.ntask * params.nt * params.ng, 0);
-  std::vector<float> fullwv(nt * nz * nx, 0);
+  std::vector<float> fullwv(3 * nz * nx, 0);
+	// fullwv_t0: t - 1 timestep; fulllwv_t1: t timestep; fullwv_t2: t + 1 timestep
+	float *fullwv_t0, *fullwv_t1, *fullwv_t2;	
+	fullwv_t0 = &fullwv[0];
+	fullwv_t1 = &fullwv[nz * nx];
+	fullwv_t2 = &fullwv[2 * nz * nx];
   for(int is=rank*k; is<rank*k+ntask; is++) {
     int local_is = is - rank * k;
     Timer timer;
+    std::vector<float> dobs(params.nt * params.ng, 0);
+		//fmMethod.BornForwardModeling(exvel_m, wlt, dobs, is);
     std::vector<float> p0(nz * nx, 0);
     std::vector<float> p1(nz * nx, 0);
-    std::vector<float> dobs(params.nt * params.ng, 0);
+    std::vector<float> rp0(nz * nx, 0);
+    std::vector<float> rp1(nz * nx, 0);
     ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
 
-		int halo = 6;
-    for(int it=0; it<nt; it++) {
-      fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
+    for(int it0 = 0 ; it0 < nt + 1 ; it0 ++) {
+      fmMethod.addSource(&p1[0], &wlt[it0], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
       std::swap(p1, p0);
-			//std::copy(p0.begin(), p0.end(), &fullwv[it * nz * nx]);
-      //fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
-			for(int i = halo + nb ; i < nx - halo - nb ; i ++)
-				for(int j = halo ; j < nz - halo - nb ; j ++)
-					fullwv[it * nx * nz + i * nz + j] = p0[i * nz + j];
-		}
+			swap3(fullwv_t0, fullwv_t1, fullwv_t2);
+			std::copy(p0.begin(), p0.end(), fullwv_t2);
 
-		p0.assign(nz * nx, 0);
-		p1.assign(nz * nx, 0);
-    for(int it = 0; it < nt; it++) {
-			if(it == 0) {
-				/*
-				for(int i = 0 ; i < nx ; i ++)
-					for(int j = 0 ; j < nz ; j ++)
-					*/
-				for(int i = halo + nb ; i < nx - halo - nb ; i ++)
-					for(int j = halo ; j < nz - halo - nb ; j ++)
-						p1[i * nz + j] += 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - fullwv[it * nx * nz + i * nz + j]) / exvel.dat[i * nz + j] * exvel_m[i * nz + j] / dt;
-			}
-			else if(it == nt - 1) {
-				for(int i = halo + nb ; i < nx - halo - nb ; i ++)
-					for(int j = halo ; j < nz - halo - nb ; j ++)
-						p1[i * nz + j] += 2 * (fullwv[it * nx * nz + i * nz + j] - fullwv[(it - 1) * nx * nz + i * nz + j]) / exvel.dat[i * nz + j] * exvel_m[i * nz + j] / dt;
-			}
-			else {
-				for(int i = halo + nb ; i < nx - halo - nb ; i ++)
-					for(int j = halo ; j < nz - halo - nb ; j ++)
-						p1[i * nz + j] -= 2 * (fullwv[(it + 1) * nx * nz + i * nz + j] - 2 * fullwv[it * nx * nz + i * nz + j] + fullwv[(it - 1) * nx * nz + i * nz + j]) / exvel.dat[i * nz + j] * exvel_m[i * nz + j];
-			}
-      //fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
-      fmMethod.stepForward(&p0[0], &p1[0]);
-      std::swap(p1, p0);
-      fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
-
+			int it = it0 - 1;
+			if(it < 0)
+				continue;
+			fmMethod.addBornwv(fullwv_t0, fullwv_t1, fullwv_t2, &exvel_m[0], dt, it, &rp1[0]);
+      fmMethod.stepForward(&rp0[0], &rp1[0]);
+      std::swap(rp1, rp0);
+      fmMethod.recordSeis(&dobs[it*ng], &rp0[0]);
     }
 
     matrix_transpose(&dobs[0], &trans[local_is * ng * nt], ng, nt);

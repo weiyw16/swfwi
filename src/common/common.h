@@ -86,4 +86,13 @@ void update_vel(float *vv, const float *cg, float alpha, int nz, int nx);
 void executeCMD(const char *cmd, char *result);
 void printGitInfo();
 
+template<class T>
+void swap3(T* &a, T* &b, T* &c)
+{
+	T* t;
+	t = a;
+	a = b;
+	b = c;
+	c = t;
+}
 #endif /* SRC_COMMON_COMMON_H_ */

@@ -398,3 +398,4 @@ void printGitInfo()
 	executeCMD( "git log --oneline --decorate | head -n 2", result);
 	INFO() << format("\nCurrent git info: \n%s\n") % result;
 }
+
