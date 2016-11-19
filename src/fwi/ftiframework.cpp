@@ -100,15 +100,19 @@ void transVsrc(std::vector<float> &vsrc, int nt, int ng) {
   }
 }
 
-void cross_correlation_born(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int h) {
+void cross_correlation_born(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H) {
 	float t_src_wave, t_vsrc_wave;
-  for (int i = 0; i < nx ; i ++) {
-		for (int j = 0; j < nz ; j ++) {
-			t_src_wave = i + h <= nx ? src_wave[(i + h) * nz + j] : src_wave[(nx - 1) * nz + j];
-			t_vsrc_wave = i - h >= 0 ? src_wave[(i - h) * nz + j] : src_wave[0 * nz + j];
-			image[i * nz + j] += t_src_wave * t_vsrc_wave * scale;
+	for(int h = -H ; h < H ; h ++) {
+		for (int i = 0; i < nx ; i ++) {
+			for (int j = 0; j < nz ; j ++) {
+				t_src_wave = i + h < nx ? src_wave[(i + h) * nz + j] : src_wave[(nx - 1) * nz + j];
+				t_src_wave = i + h >= 0 ? t_src_wave : src_wave[0 * nz + j];
+				t_vsrc_wave = i - h < nx ? vsrc_wave[(i - h) * nz + j] : vsrc_wave[(nx - 1) * nz + j];
+				t_vsrc_wave = i - h >= 0 ? t_vsrc_wave: vsrc_wave[0 * nz + j];
+				image[(h + H) * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
+			}
 		}
-  }
+	}
 }
 
 void image_born(const Damp4t10d &fmMethod,
@@ -116,7 +120,7 @@ void image_born(const Damp4t10d &fmMethod,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,
     int nt, float dt,
-		int shot_id, int rank, int h)
+		int shot_id, int rank, int H)
 {
   int nx = fmMethod.getnx();
   int nz = fmMethod.getnz();
@@ -136,68 +140,72 @@ void image_born(const Damp4t10d &fmMethod,
 
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
-    //printf("it = %d, forward 1\n", it);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
-    //printf("it = %d, forward 2\n", it);
     std::swap(sp1, sp0);
-    //fmMethod.writeBndry(&bndr[0], &sp0[0], it); -test
-		const int check_step = 5;
-    if ((it > 0) && (it != (nt - 1)) && !(it % check_step)) {
-      char check_file_name1[64];
-      char check_file_name2[64];
-      sprintf(check_file_name1, "./rank_%d_check_time_%d_1.su", rank, it);
-      sprintf(check_file_name2, "./rank_%d_check_time_%d_2.su", rank, it);
-			FILE *f1 = fopen(check_file_name1, "wb");
-			FILE *f2 = fopen(check_file_name2, "wb");
-			fwrite(&sp0[0], sizeof(float), nx * nz, f1);
-			fwrite(&sp1[0], sizeof(float), nx * nz, f2);
-			fclose(f1);
-			fclose(f2);
-    }
+    fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
   }
-	char check_file_name1[64];
-	char check_file_name2[64];
-	sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
-	sprintf(check_file_name2, "./rank_%d_check_time_last_2.su", rank);
-	FILE *f1 = fopen(check_file_name1, "wb");
-	FILE *f2 = fopen(check_file_name2, "wb");
-	fwrite(&sp0[0], sizeof(float), nx * nz, f1);
-	fwrite(&sp1[0], sizeof(float), nx * nz, f2);
-	fclose(f1);
-	fclose(f2);
+
+  std::vector<float> vsrc_trans(ng * nt, 0.0f);
+  matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
+
+  for(int it = nt - 1; it >= 0 ; it--) {
+    fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
+    std::swap(sp0, sp1); //-test
+    fmMethod.stepBackward(&sp0[0], &sp1[0]);
+    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
+
+    /**
+     * forward propagate receviers
+     */
+    fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
+    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    std::swap(gp1, gp0);
+
+    cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
+ }
+}
+
+void calgradient(const Damp4t10d &fmMethod,
+    const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &I,
+    std::vector<float> &gd,
+    int nt, float dt,
+		int shot_id, int rank, int H)
+{
+  int nx = fmMethod.getnx();
+  int nz = fmMethod.getnz();
+  int ns = fmMethod.getns();
+  int ng = fmMethod.getng();
+  const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
+  const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
+
+  std::vector<float> bndr = fmMethod.initBndryVector(nt);
+  std::vector<float> sp0(nz * nx, 0);
+  std::vector<float> sp1(nz * nx, 0);
+  std::vector<float> gp0(nz * nx, 0);
+  std::vector<float> gp1(nz * nx, 0);
+
+	std::vector<float> ps(nt * nx * nz, 0);
+	std::vector<float> pg(nt * nx * nz, 0);
+
+  ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
+
+  for(int it=0; it<nt; it++) {
+    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    std::swap(sp1, sp0);
+		for(int ix = 0 ; ix < nx ; ix ++)
+			for(int iz = 0 ; iz < nz ; iz ++)
+				ps[it * nx * nz + ix * nz + iz] = sp1[ix * nz + iz] - sp0[ix * nz + iz];
+  }
 
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
   for(int it = nt - 1; it >= 0 ; it--) {
     //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
-		const int check_step = 5;
-		if(it == nt - 1)
-		{
-			char check_file_name1[64];
-			char check_file_name2[64];
-			sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
-			sprintf(check_file_name2, "./rank_%d_check_time_last_2.su", rank);
-			FILE *f1 = fopen(check_file_name1, "rb");
-			FILE *f2 = fopen(check_file_name2, "rb");
-			fread(&sp1[0], sizeof(float), nx * nz, f1);
-			fread(&sp0[0], sizeof(float), nx * nz, f2);
-			fclose(f1);
-			fclose(f2);
-		}
-		else if ((check_step > 0) && !(it % check_step) && (it != 0)) {
-			char check_file_name1[64];
-			char check_file_name2[64];
-			sprintf(check_file_name1, "./rank_%d_check_time_%d_1.su", rank, it);
-			sprintf(check_file_name2, "./rank_%d_check_time_%d_2.su", rank, it);
-			FILE *f1 = fopen(check_file_name1, "rb");
-			FILE *f2 = fopen(check_file_name2, "rb");
-			fread(&sp1[0], sizeof(float), nx * nz, f1);
-			fread(&sp0[0], sizeof(float), nx * nz, f2);
-			fclose(f1);
-			fclose(f2);
-		}
-
     //std::swap(sp0, sp1); -test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
     //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
@@ -208,24 +216,45 @@ void image_born(const Damp4t10d &fmMethod,
      * forward propagate receviers
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    //printf("it = %d, receiver 1\n", it);
     fmMethod.stepForward(&gp0[0], &gp1[0]);
-    //printf("it = %d, receiver 2\n", it);
     std::swap(gp1, gp0);
+		for(int ix = 0 ; ix < nx ; ix ++)
+			for(int iz = 0 ; iz < nz ; iz ++)
+				pg[it * nx * nz + ix * nz + iz] = gp1[ix * nz + iz] - gp0[ix * nz + iz];
+	}
 
-    if (dt * it > 0.4) {
-      //printf("it = %d, cross 1\n", it);
-      cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, h);
-      //printf("it = %d, cross 2\n", it);
-    } else if (dt * it > 0.3) {
-      //printf("it = %d, cross 3\n", it);
-      cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, (dt * it - 0.3) / 0.1, h);
-      //printf("it = %d, cross 4\n", it);
-    } else {
-      //printf("it = %d, cross 5\n");
-      break;
-    }
- }
+	sp0.assign(nx * nz, 0);
+	sp1.assign(nx * nz, 0);
+	gp0.assign(nx * nz, 0);
+	gp1.assign(nx * nz, 0);
+
+	const Velocity &exvel = fmMethod.getVelocity();
+
+	for(int it=0; it<nt; it++) {
+		for(int h = 0 ; h < H ; h ++)
+			for(int ix = 0 ; ix < nx ; ix ++) 
+				for(int iz = 0 ; iz < nz ; iz ++) 
+					sp1[ix * nz + iz] += ps[it * nx * nz + (ix + 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix + h) * nz + iz];
+		fmMethod.stepForward(&sp0[0], &sp1[0]);
+		std::swap(sp1, sp0);
+		for(int ix = 0 ; ix < nx ; ix ++) 
+			for(int iz = 0 ; iz < nz ; iz ++) 
+				gd[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+	}
+
+	for(int it = nt - 1; it >= 0 ; it--) {
+		for(int h = 0 ; h < H ; h ++)
+			for(int ix = 0 ; ix < nx ; ix ++)
+				for(int iz = 0 ; iz < nz ; iz ++)
+					gp1[ix * nz + iz] += pg[(nt - (it - 1)) * nx * nz + (ix - 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix - h) * nz + iz];
+    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    std::swap(gp1, gp0);
+		for(int ix = 0 ; ix < nx ; ix ++) 
+			for(int iz = 0 ; iz < nz ; iz ++) 
+				gd[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+	}
+
+
 }
 
 } /// end of namespace
@@ -245,8 +274,6 @@ FtiFramework::FtiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSt
 }
 
 void FtiFramework::epoch(int iter) {
-	std::vector<float> g1(nx * nz, 0);
-	std::vector<float> g2(nx * nz, 0);
 	std::vector<float> encsrc(wlt);
 	std::vector<float> encobs(ng * nt, 0);
 	int rank, np, k, ntask, shot_begin, shot_end;
@@ -257,7 +284,9 @@ void FtiFramework::epoch(int iter) {
 	shot_begin = rank * k;
 	shot_end = shot_begin + ntask;
 	float local_obj1 = 0.0f, obj1 = 0.0f;
-	int H = 5;
+	int H = 10;
+	std::vector<float> g1(2 * H * nx * nz, 0);
+	std::vector<float> g2(2 * H * nx * nz, 0);
 
 	sf_file sf_g2;
 	if(rank == 0 && iter == 0)
@@ -265,170 +294,100 @@ void FtiFramework::epoch(int iter) {
 		sf_g2 = sf_output("g2.rsf");
 		sf_putint(sf_g2, "n1", nz);
 		sf_putint(sf_g2, "n2", nx);
-		sf_putint(sf_g2, "n3", H);
+		sf_putint(sf_g2, "n3", 2 * H);
 	}
 
-	for(int h = 0 ; h < H ; h ++)
-	{
-		for(int is = shot_begin ; is < shot_end ; is ++) {
-			std::vector<float> encobs_trans(nt * ng, 0.0f);
-			INFO() << format("calculate gradient, h = %d, shot id: %d") % h % is;
-			memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+	for(int is = shot_begin ; is < shot_end ; is ++) {
+		std::vector<float> encobs_trans(nt * ng, 0.0f);
+		INFO() << format("calculate gradient, shot id: %d") % is;
+		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 
-			matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
+		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
 
-			/*
-				 if(iter == 1)
-				 {
-				 sf_file sf_encobs = sf_output("encobs.rsf");
-				 sf_putint(sf_encobs, "n1", nt);
-				 sf_putint(sf_encobs, "n2", ng);
-				 sf_floatwrite(&encobs[0], nt * ng, sf_encobs);
-				 }
-				 */
+		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
+		INFO() << encsrc[0] << " " << encsrc[132];
+		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
 
-			/*
-				 sf_file sf_encsrc = sf_output("encsrc.rsf");
-				 sf_putint(sf_encsrc, "n1", nt);
-				 sf_floatwrite(&encsrc[0], nt, sf_encsrc);
-				 */
+		std::vector<float> dcal(nt * ng, 0);
+		std::vector<float> dcal_trans(ng * nt, 0.0f);
+		fmMethod.FwiForwardModeling(encsrc, dcal_trans, is);
+		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
 
-			INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
-			INFO() << encsrc[0] << " " << encsrc[132];
-			INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
+		INFO() << dcal[0];
+		INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
 
-			std::vector<float> dcal(nt * ng, 0);
-			std::vector<float> dcal_trans(ng * nt, 0.0f);
-			fmMethod.FwiForwardModeling(encsrc, dcal_trans, is);
-			matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
+		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
+		fmMethod.fwiRemoveDirectArrival(&dcal[0], is);
 
+		INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
+		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
 
-			/*
-				 if(iter == 0)
-				 {
-				 char fg2[64];
-				 sprintf(fg2, "dcal_%02d.rsf", is);
-				 sf_file sf_dcal = sf_output(fg2);
-				 sf_putint(sf_dcal, "n1", nt);
-				 sf_putint(sf_dcal, "n2", ng);
-				 sf_floatwrite(&dcal[0], nt * ng, sf_dcal);
-				 }
-				 */
+		std::vector<float> vsrc(nt * ng, 0);
+		vectorMinus(encobs, dcal, vsrc);
+		local_obj1 += cal_objective(&vsrc[0], vsrc.size());
+		initobj = iter == 0 ? local_obj1 : initobj;
+		//DEBUG() << format("obj: %e") % obj1;
+		INFO() << "obj: " << local_obj1 << "\n";
 
-			/*
-				 if(iter == 1 && is == 0)
-				 {
-				 FILE *f_dcal = fopen("dcal.bin", "wb");
-				 fwrite(&trans_dcal[0], sizeof(float), ng * nt, f_dcal);
-				 fclose(f_dcal);
-				 }
-				 */
+		//transVsrc(vsrc, nt, ng);
 
-			INFO() << dcal[0];
-			INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
+		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
+		//std::copy(dcal.begin(), dcal.end(), vsrc.begin());	//-test
 
-			fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
-			fmMethod.fwiRemoveDirectArrival(&dcal[0], is);
-
-			/*
-				 sf_file sf_encobs = sf_output("encobs2.rsf");
-				 sf_putint(sf_encobs, "n1", nt);
-				 sf_putint(sf_encobs, "n2", ng);
-				 sf_floatwrite(&encobs[0], nt * ng, sf_encobs);
-				 exit(1);
-				 */
-
-			/*
-				 if(iter == 1)
-				 {
-				 sf_file sf_dcal = sf_output("dcal2.rsf");
-				 sf_putint(sf_dcal, "n1", nt);
-				 sf_putint(sf_dcal, "n2", ng);
-				 sf_floatwrite(&dcal[0], nt * ng, sf_dcal);
-				 exit(1);
-				 }
-				 */
-
-			INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
-			INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
-
-			std::vector<float> vsrc(nt * ng, 0);
-			vectorMinus(encobs, dcal, vsrc);
-			local_obj1 += cal_objective(&vsrc[0], vsrc.size());
-			initobj = iter == 0 ? local_obj1 : initobj;
-			//DEBUG() << format("obj: %e") % obj1;
-			INFO() << "obj: " << local_obj1 << "\n";
-
-			transVsrc(vsrc, nt, ng);
-
-			std::copy(dcal.begin(), dcal.end(), vsrc.begin());	//-test
-
-			INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
-
-			g1.assign(nx * nz, 0.0f);
-			//std::vector<float> g1(nx * nz, 0);
-			image_born(fmMethod, encsrc, vsrc, g1, nt, dt, is, rank, h);
-
-			/*
-				 sf_file sf_vsrc= sf_output("vsrc.rsf");
-				 sf_putint(sf_vsrc, "n1", nt);
-				 sf_putint(sf_vsrc, "n2", ng);
-				 sf_floatwrite(&vsrc[0], nt * ng, sf_vsrc);
-				 exit(1);
-				 */
-
-			DEBUG() << format("grad %.20f") % sum(g1);
-
-			//fmMethod.scaleGradient(&g1[0]);
-			fmMethod.maskGradient(&g1[0]);
-
-			/*
-				 char fg1[64];
-				 sprintf(fg1, "g1_%02d.rsf", is);
-				 sf_file sf_g1 = sf_output(fg1);
-				 sf_putint(sf_g1, "n1", nz);
-				 sf_putint(sf_g1, "n2", nx);
-				 sf_floatwrite(&g1[0], nx * nz, sf_g1);
-				 */
-
-			/*
-				 char filename[20];
-				 sprintf(filename, "gradient%02d.bin", is);
-				 FILE *f = fopen(filename,"wb");
-				 fwrite(&g1[0], sizeof(float), nx * nz, f);
-				 fclose(f);
-				 */
-
-			std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
-
-			/*
-				 sf_file sf_g2 = sf_output("g2.rsf");
-				 sf_putint(sf_g2, "n1", nz);
-				 sf_putint(sf_g2, "n2", nx);
-				 sf_floatwrite(&g2[0], nx * nz, sf_g2);
-				 exit(1);
-				 */
-
-			DEBUG() << format("global grad %.20f") % sum(g2);
-		}
+		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
 
 		g1.assign(nx * nz, 0.0f);
-		MPI_Allreduce(&g2[0], &g1[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-		MPI_Allreduce(&local_obj1, &obj1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+		//std::vector<float> g1(nx * nz, 0);
+		image_born(fmMethod, encsrc, vsrc, g1, nt, dt, is, rank, H);
 
-		if(rank == 0)
-		{
-			DEBUG() << format("****** global grad %.20f") % sum(g1);
-			DEBUG() << format("****** sum obj: %.20f") % obj1;
-		}
+		DEBUG() << format("grad %.20f") % sum(g1);
 
-		if(rank == 0 && iter == 0)
-		{
-			sf_floatwrite(&g1[0], nx * nz, sf_g2);
-		}
+		//fmMethod.scaleGradient(&g1[0]);
+		fmMethod.maskGradient(&g1[0]);
+
+		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
+
+		DEBUG() << format("global grad %.20f") % sum(g2);
+	}
+
+	g1.assign(2 * H * nx * nz, 0.0f);
+	MPI_Allreduce(&g2[0], &g1[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	MPI_Allreduce(&local_obj1, &obj1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+	if(rank == 0)
+	{
+		DEBUG() << format("****** global grad %.20f") % sum(g1);
+		DEBUG() << format("****** sum obj: %.20f") % obj1;
+	}
+
+	if(rank == 0 && iter == 0)
+	{
+		sf_floatwrite(&g1[0], 2 * H * nx * nz, sf_g2);
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);
+	exit(1);
+
+	std::vector<float> gd(nx * nz, 0);
+	std::vector<float> grad(nx * nz, 0);
+	for(int is = shot_begin ; is < shot_end ; is ++) {
+		INFO() << format("Calculating gradient %d:") % is;
+		std::vector<float> encobs_trans(nt * ng, 0.0f);
+		std::vector<float> vsrc(ng * nt, 0);
+		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
+		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
+		calgradient(fmMethod, encsrc, vsrc, g1, gd, nt, dt, is, rank, H);
+	}
+	MPI_Allreduce(&gd[0], &grad[0], gd.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+	if(rank == 0 && iter == 0) {
+		 sf_file sf_g2 = sf_output("grad.rsf");
+		 sf_putint(sf_g2, "n1", nz);
+		 sf_putint(sf_g2, "n2", nx);
+		 sf_floatwrite(&grad[0], nx * nz, sf_g2);
+	}
+
 	exit(1);
 
 	updateGrad(&g0[0], &g1[0], &updateDirection[0], g0.size(), iter);
