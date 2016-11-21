@@ -32,6 +32,8 @@ public:
   void subSource(float *p, const float *source, const ShotPosition &pos) const;
   void addEncodedSource(float *p, const float *encsrc) const;
   void recordSeis(float *seis_it, const float *p) const;
+  void bornMaskGradient(float *grad, int H) const;
+  void bornScaleGradient(float *grad, int H) const;
   void maskGradient(float *grad) const;
   void scaleGradient(float *grad) const;
   void refillBoundary(float *vel) const;

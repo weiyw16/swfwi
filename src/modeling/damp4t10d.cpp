@@ -301,6 +301,22 @@ void Damp4t10d::manipSource(float* p, const float* source,
   }
 }
 
+void Damp4t10d::bornMaskGradient(float* grad, int H) const {
+  int nxpad = vel->nx;
+  int nzpad = vel->nz;
+#pragma omp parallel for
+	for (int h = -H ; h < H ; h ++) {
+		int ind = h + H;
+		for (int ix = 0; ix < nxpad; ix++) {
+			for (int iz = 0; iz < nzpad; iz++) {
+				if (ix < bx0 || iz < bz0 || ix >= nxpad - bxn || iz >= nzpad - bzn) {
+					grad[ind * nxpad * nzpad + ix  * nzpad + iz] = 0.f;
+				}
+			}
+		}
+	}
+}
+
 void Damp4t10d::maskGradient(float* grad) const {
   int nxpad = vel->nx;
   int nzpad = vel->nz;
@@ -514,6 +530,22 @@ void Damp4t10d::EssForwardModeling(const std::vector<float>& encSrc,
     std::swap(p1, p0);
     recordSeis(&dcal[it*ng], &p0[0]);
   }
+}
+
+void Damp4t10d::bornScaleGradient(float* grad, int H) const {
+  int nxpad = vel->nx;
+  int nzpad = vel->nz;
+  int nz = nzpad - bz0 - bzn;
+
+#pragma omp parallel for
+	for (int h = -H ; h < H ; h ++) {
+		int ind = h + H;
+		for (int ix = bx0; ix < nxpad - bxn; ix++) {
+			for (int iz = 1; iz < nz; iz++) {
+				grad[ind * nxpad * nzpad + ix*nzpad + iz+bz0] *= std::sqrt(static_cast<float>(iz));
+			}
+		}
+	}
 }
 
 void Damp4t10d::scaleGradient(float* grad) const {

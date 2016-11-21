@@ -102,14 +102,16 @@ void transVsrc(std::vector<float> &vsrc, int nt, int ng) {
 
 void cross_correlation_born(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H) {
 	float t_src_wave, t_vsrc_wave;
+#pragma omp parallel for private(t_src_wave, t_vsrc_wave)
 	for(int h = -H ; h < H ; h ++) {
+		int ind = h + H;
 		for (int i = 0; i < nx ; i ++) {
 			for (int j = 0; j < nz ; j ++) {
-				t_src_wave = i + h < nx ? src_wave[(i + h) * nz + j] : src_wave[(nx - 1) * nz + j];
-				t_src_wave = i + h >= 0 ? t_src_wave : src_wave[0 * nz + j];
-				t_vsrc_wave = i - h < nx ? vsrc_wave[(i - h) * nz + j] : vsrc_wave[(nx - 1) * nz + j];
-				t_vsrc_wave = i - h >= 0 ? t_vsrc_wave: vsrc_wave[0 * nz + j];
-				image[(h + H) * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
+				t_src_wave = i + h < nx ? src_wave[(i + h) * nz + j] : 0;
+				t_src_wave = i + h >= 0 ? t_src_wave : 0;
+				t_vsrc_wave = i - h < nx ? vsrc_wave[(i - h) * nz + j] : 0;
+				t_vsrc_wave = i - h >= 0 ? t_vsrc_wave: 0;
+				image[ind * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
 			}
 		}
 	}
@@ -153,6 +155,7 @@ void image_born(const Damp4t10d &fmMethod,
     std::swap(sp0, sp1); //-test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
     //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    //std::swap(sp0, sp1); //-test
     fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
 
     /**
@@ -162,7 +165,19 @@ void image_born(const Damp4t10d &fmMethod,
     fmMethod.stepForward(&gp0[0], &gp1[0]);
     std::swap(gp1, gp0);
 
-    cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
+    if (dt * it > 0.4) {
+      //printf("it = %d, cross 1\n", it);
+      cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
+      //printf("it = %d, cross 2\n", it);
+    } else if (dt * it > 0.3) {
+      //printf("it = %d, cross 3\n", it);
+      cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, (dt * it - 0.3) / 0.1, H);
+      //printf("it = %d, cross 4\n", it);
+    } else {
+      //printf("it = %d, cross 5\n");
+      break;
+    }
+    //cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
  }
 }
 
@@ -284,7 +299,7 @@ void FtiFramework::epoch(int iter) {
 	shot_begin = rank * k;
 	shot_end = shot_begin + ntask;
 	float local_obj1 = 0.0f, obj1 = 0.0f;
-	int H = 10;
+	int H = 20;
 	std::vector<float> g1(2 * H * nx * nz, 0);
 	std::vector<float> g2(2 * H * nx * nz, 0);
 
@@ -329,25 +344,25 @@ void FtiFramework::epoch(int iter) {
 		//DEBUG() << format("obj: %e") % obj1;
 		INFO() << "obj: " << local_obj1 << "\n";
 
-		//transVsrc(vsrc, nt, ng);
+		transVsrc(vsrc, nt, ng);
 
 		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
 		//std::copy(dcal.begin(), dcal.end(), vsrc.begin());	//-test
 
 		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
 
-		g1.assign(nx * nz, 0.0f);
+		g1.assign(2 * H * nx * nz, 0.0f);
 		//std::vector<float> g1(nx * nz, 0);
 		image_born(fmMethod, encsrc, vsrc, g1, nt, dt, is, rank, H);
 
-		DEBUG() << format("grad %.20f") % sum(g1);
+		DEBUG() << ("sum grad: ") << std::accumulate(&g1[H * nx * nz], &g1[(H + 1) * nx * nz], 0.0f);
 
 		//fmMethod.scaleGradient(&g1[0]);
-		fmMethod.maskGradient(&g1[0]);
+		fmMethod.bornMaskGradient(&g1[0], H);
 
 		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
 
-		DEBUG() << format("global grad %.20f") % sum(g2);
+		DEBUG() << ("global grad: ") << std::accumulate(&g2[H * nx * nz], &g2[(H + 1) * nx * nz], 0.0f);
 	}
 
 	g1.assign(2 * H * nx * nz, 0.0f);
@@ -356,7 +371,7 @@ void FtiFramework::epoch(int iter) {
 
 	if(rank == 0)
 	{
-		DEBUG() << format("****** global grad %.20f") % sum(g1);
+		DEBUG() << ("****** global grad: ") << std::accumulate(&g1[H * nx * nz], &g1[(H + 1) * nx * nz], 0.0f);
 		DEBUG() << format("****** sum obj: %.20f") % obj1;
 	}
 
