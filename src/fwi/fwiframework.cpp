@@ -47,7 +47,6 @@ FwiFramework::FwiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSt
 void FwiFramework::epoch(int iter) {
 	std::vector<float> g1(nx * nz, 0);
 	std::vector<float> g2(nx * nz, 0);
-	std::vector<float> encsrc(wlt);
 	std::vector<float> encobs(ng * nt, 0);
 	int rank, np, k, ntask, shot_begin, shot_end;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -76,18 +75,18 @@ void FwiFramework::epoch(int iter) {
 			 */
 
 		/*
-			 sf_file sf_encsrc = sf_output("encsrc.rsf");
-			 sf_putint(sf_encsrc, "n1", nt);
-			 sf_floatwrite(&encsrc[0], nt, sf_encsrc);
+			 sf_file sf_wlt = sf_output("wlt.rsf");
+			 sf_putint(sf_wlt, "n1", nt);
+			 sf_floatwrite(&wlt[0], nt, sf_wlt);
 			 */
 
 		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
-		INFO() << encsrc[0] << " " << encsrc[132];
-		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
+		INFO() << wlt[0] << " " << wlt[132];
+		INFO() << "sum wlt: " << std::accumulate(wlt.begin(), wlt.begin() + nt, 0.0f);
 
 		std::vector<float> dcal(nt * ng, 0);
 		std::vector<float> dcal_trans(ng * nt, 0.0f);
-		fmMethod.FwiForwardModeling(encsrc, dcal_trans, is);
+		fmMethod.FwiForwardModeling(wlt, dcal_trans, is);
 		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
 
 
@@ -153,7 +152,7 @@ void FwiFramework::epoch(int iter) {
 
 		g1.assign(nx * nz, 0.0f);
 		//std::vector<float> g1(nx * nz, 0);
-		calgradient(fmMethod, encsrc, vsrc, g1, nt, dt, is, rank);
+		calgradient(fmMethod, wlt, vsrc, g1, nt, dt, is, rank);
 
 		/*
 			 sf_file sf_vsrc= sf_output("vsrc.rsf");
@@ -296,7 +295,7 @@ void FwiFramework::epoch(int iter) {
 }
 
 void FwiFramework::calgradient(const Damp4t10d &fmMethod,
-    const std::vector<float> &encSrc,
+    const std::vector<float> &wlt,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,
     int nt, float dt,
@@ -319,7 +318,7 @@ void FwiFramework::calgradient(const Damp4t10d &fmMethod,
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
   for(int it=0; it<nt; it++) {
-    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     //printf("it = %d, forward 1\n", it);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
     //printf("it = %d, forward 2\n", it);
@@ -384,9 +383,9 @@ void FwiFramework::calgradient(const Damp4t10d &fmMethod,
 
     //std::swap(sp0, sp1); -test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    //fmMethod.subEncodedSource(&sp0[0], &wlt[it]);
     std::swap(sp0, sp1);	//-test
-    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
+    fmMethod.subSource(&sp0[0], &wlt[it], curSrcPos);
 
     /**
      * forward propagate receviers

@@ -43,7 +43,6 @@ FtiFramework::FtiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSt
 }
 
 void FtiFramework::epoch(int iter) {
-	std::vector<float> encsrc(wlt);
 	std::vector<float> encobs(ng * nt, 0);
 	int rank, np, k, ntask, shot_begin, shot_end;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -74,12 +73,12 @@ void FtiFramework::epoch(int iter) {
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
 
 		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
-		INFO() << encsrc[0] << " " << encsrc[132];
-		INFO() << "sum encsrc: " << std::accumulate(encsrc.begin(), encsrc.begin() + nt, 0.0f);
+		INFO() << wlt[0] << " " << wlt[132];
+		INFO() << "sum wlt: " << std::accumulate(wlt.begin(), wlt.begin() + nt, 0.0f);
 
 		std::vector<float> dcal(nt * ng, 0);
 		std::vector<float> dcal_trans(ng * nt, 0.0f);
-		fmMethod.FwiForwardModeling(encsrc, dcal_trans, is);
+		fmMethod.FwiForwardModeling(wlt, dcal_trans, is);
 		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
 
 		INFO() << dcal[0];
@@ -107,7 +106,7 @@ void FtiFramework::epoch(int iter) {
 
 		g1.assign(2 * H * nx * nz, 0.0f);
 		//std::vector<float> g1(nx * nz, 0);
-		image_born(fmMethod, encsrc, vsrc, g1, nt, dt, is, rank, H);
+		image_born(fmMethod, wlt, vsrc, g1, nt, dt, is, rank, H);
 
 		DEBUG() << ("sum grad: ") << std::accumulate(&g1[H * nx * nz], &g1[(H + 1) * nx * nz], 0.0f);
 
@@ -146,7 +145,7 @@ void FtiFramework::epoch(int iter) {
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
 		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
-		calgradient(fmMethod, encsrc, vsrc, g1, gd, nt, dt, is, rank, H);
+		calgradient(fmMethod, wlt, vsrc, g1, gd, nt, dt, is, rank, H);
 	}
 	MPI_Allreduce(&gd[0], &grad[0], gd.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
@@ -236,7 +235,7 @@ void FtiFramework::epoch(int iter) {
 }
 
 void FtiFramework::calgradient(const Damp4t10d &fmMethod,
-    const std::vector<float> &encSrc,
+    const std::vector<float> &wlt,
     const std::vector<float> &vsrc,
     std::vector<float> &I,
     std::vector<float> &gd,
@@ -262,7 +261,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
   for(int it=0; it<nt; it++) {
-    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
     std::swap(sp1, sp0);
 		for(int ix = 0 ; ix < nx ; ix ++)
@@ -277,9 +276,9 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
     //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
     //std::swap(sp0, sp1); -test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    //fmMethod.subEncodedSource(&sp0[0], &wlt[it]);
     std::swap(sp0, sp1);	//-test
-    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
+    fmMethod.subSource(&sp0[0], &wlt[it], curSrcPos);
 
     /**
      * forward propagate receviers
@@ -325,7 +324,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 }
 
 void FtiFramework::image_born(const Damp4t10d &fmMethod,
-    const std::vector<float> &encSrc,
+    const std::vector<float> &wlt,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,
     int nt, float dt,
@@ -348,7 +347,7 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
   for(int it=0; it<nt; it++) {
-    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
     std::swap(sp1, sp0);
     fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
@@ -361,9 +360,9 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
     fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
     std::swap(sp0, sp1); //-test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    //fmMethod.subEncodedSource(&sp0[0], &wlt[it]);
     //std::swap(sp0, sp1); //-test
-    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
+    fmMethod.subSource(&sp0[0], &wlt[it], curSrcPos);
 
     /**
      * forward propagate receviers

@@ -22,6 +22,7 @@ extern "C" {
 #include "environment.h"
 #include "math.h"
 
+#define OFFSET 1000000
 namespace {
 class Params {
 public:
@@ -37,6 +38,7 @@ public:
   sf_file vinit;
   sf_file vreal;
   sf_file shots;
+  sf_file shots_bg;
   int nb;
   int nz;
   int nx;
@@ -70,6 +72,7 @@ Params::Params() {
   vinit=sf_input ("vinit");   /* initial velocity model, unit=m/s */
   vreal=sf_input ("vreal");   /* initial velocity model, unit=m/s */
   shots=sf_output("shots");
+  shots_bg=sf_output("shots_bg");
 
   /* get parameters for forward modeling */
   if (!sf_histint(vinit,"n1",&nz)) sf_error("no n1");
@@ -170,11 +173,39 @@ Params::Params() {
   sf_putint(shots,"jgz",jgz);
   sf_putint(shots, "nb", nb);
 
+  sf_putint(shots_bg,"n1",nt);
+  sf_putint(shots_bg,"n2",ng);
+  sf_putint(shots_bg,"n3",ns);
+  sf_putfloat(shots_bg,"d1",dt);
+  sf_putfloat(shots_bg,"d2",jgx*dx);
+  sf_putfloat(shots_bg,"o1",0);
+  sf_putfloat(shots_bg,"o2",0);
+  sf_putstring(shots_bg,"label1","Time");
+  sf_putstring(shots_bg,"label2","Lateral");
+  sf_putstring(shots_bg,"label3","Shot");
+  sf_putstring(shots_bg,"unit1","sec");
+  sf_putstring(shots_bg,"unit2","m");
+  sf_putfloat(shots_bg,"amp",amp);
+  sf_putfloat(shots_bg,"fm",fm);
+  sf_putint(shots_bg,"ng",ng);
+  sf_putint(shots_bg,"szbeg",szbeg);
+  sf_putint(shots_bg,"sxbeg",sxbeg);
+  sf_putint(shots_bg,"gzbeg",gzbeg);
+  sf_putint(shots_bg,"gxbeg",gxbeg);
+  sf_putint(shots_bg,"jsx",jsx);
+  sf_putint(shots_bg,"jsz",jsz);
+  sf_putint(shots_bg,"jgx",jgx);
+  sf_putint(shots_bg,"jgz",jgz);
+  sf_putint(shots_bg, "nb", nb);
+
   Velocity v = SfVelocityReader::read(vinit, nx, nz);
   float vmin = *std::min_element(v.dat.begin(), v.dat.end());
   float vmax = *std::max_element(v.dat.begin(), v.dat.end());
   sf_putfloat(shots, "vmin", vmin);
   sf_putfloat(shots, "vmax", vmax);
+
+  sf_putfloat(shots_bg, "vmin", vmin);
+  sf_putfloat(shots_bg, "vmax", vmax);
 
   MPI_Comm_size(MPI_COMM_WORLD, &np);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -249,12 +280,12 @@ int main(int argc, char* argv[]) {
   std::vector<float> wlt(nt);
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
 
-  std::vector<float> trans(params.ntask * params.nt * params.ng, 0);
+  std::vector<float> dobs(params.ntask * params.nt * params.ng, 0);
   std::vector<float> fullwv(nt * nz * nx, 0);
 
 	std::vector<float> p0(nz * nx, 0);
 	std::vector<float> p1(nz * nx, 0);
-	std::vector<float> dobs(params.nt * params.ng, 0);
+	std::vector<float> dobs_trans(params.nt * params.ng, 0);
 	ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
 
 	std::vector<float> rand1(params.nt * params.ns, 0);
@@ -264,17 +295,17 @@ int main(int argc, char* argv[]) {
 		fmMethod.addSource(&p1[0], &rand1[it * ns], allSrcPos);
 		fmMethod.stepForward(&p0[0], &p1[0]);
 		std::swap(p1, p0);
-		fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
+		fmMethod.recordSeis(&dobs_trans[it*ng], &p0[0]);
 	}
 
 	p0.assign(nz * nx, 0);
 	p1.assign(nz * nx, 0);
-	dobs.assign(params.nt * params.ng, 0);
+	dobs_trans.assign(params.nt * params.ng, 0);
 	for(int it=0; it<nt; it++) {
 		fmMethod.addSource(&p1[0], &rand2[it * ng], allGeoPos);
 		fmMethod.stepForward(&p0[0], &p1[0]);
 		std::swap(p1, p0);
-		fmMethod.recordSeis(&dobs[it*ng], &p0[0]);
+		fmMethod.recordSeis(&dobs_trans[it*ng], &p0[0]);
 	}
 	
 #endif 
@@ -289,7 +320,8 @@ int main(int argc, char* argv[]) {
   std::vector<float> wlt(nt);
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);
 
-  std::vector<float> trans(params.ntask * params.nt * params.ng, 0);
+  std::vector<float> dobs(params.ntask * params.nt * params.ng, 0);
+  std::vector<float> dobs_t(params.ntask * params.nt * params.ng, 0);
   std::vector<float> fullwv(3 * nz * nx, 0);
 	// fullwv_t0: t - 1 timestep; fulllwv_t1: t timestep; fullwv_t2: t + 1 timestep
 	float *fullwv_t0, *fullwv_t1, *fullwv_t2;	
@@ -299,8 +331,9 @@ int main(int argc, char* argv[]) {
   for(int is=rank*k; is<rank*k+ntask; is++) {
     int local_is = is - rank * k;
     Timer timer;
-    std::vector<float> dobs(params.nt * params.ng, 0);
-		//fmMethod.BornForwardModeling(exvel_m, wlt, dobs, is);
+    std::vector<float> dobs_trans(params.nt * params.ng, 0);
+    std::vector<float> dobs_trans_t(params.nt * params.ng, 0);
+		//fmMethod.BornForwardModeling(exvel_m, wlt, dobs_trans, is);
     std::vector<float> p0(nz * nx, 0);
     std::vector<float> p1(nz * nx, 0);
     std::vector<float> rp0(nz * nx, 0);
@@ -311,6 +344,9 @@ int main(int argc, char* argv[]) {
       fmMethod.addSource(&p1[0], &wlt[it0], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
       std::swap(p1, p0);
+			if(it0 < nt)
+				fmMethod.recordSeis(&dobs_trans_t[it0*ng], &p0[0]);
+
 			swap3(fullwv_t0, fullwv_t1, fullwv_t2);
 			std::copy(p0.begin(), p0.end(), fullwv_t2);
 
@@ -320,29 +356,48 @@ int main(int argc, char* argv[]) {
 			fmMethod.addBornwv(fullwv_t0, fullwv_t1, fullwv_t2, &exvel_m[0], dt, it, &rp1[0]);
       fmMethod.stepForward(&rp0[0], &rp1[0]);
       std::swap(rp1, rp0);
-      fmMethod.recordSeis(&dobs[it*ng], &rp0[0]);
+      fmMethod.recordSeis(&dobs_trans[it*ng], &rp0[0]);
     }
 
-    matrix_transpose(&dobs[0], &trans[local_is * ng * nt], ng, nt);
+    matrix_transpose(&dobs_trans[0], &dobs[local_is * ng * nt], ng, nt);
 		if(np == 1) {
-			sf_floatwrite(&trans[local_is * ng * nt], ng*nt, params.shots);
+			sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
 		}
 		else {
 			if(rank == 0) {
-				sf_floatwrite(&trans[local_is * ng * nt], ng*nt, params.shots);
-				printf("trans[0] = %f\n", trans[local_is * ng * nt]);
+				sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
+				printf("dobs[0] = %f\n", dobs[local_is * ng * nt]);
 				if(is == rank * k + ntask - 1) {
 					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
-						MPI_Recv(&trans[0], ng*nt, MPI_FLOAT, other_is / k, other_is, MPI_COMM_WORLD, &status);
-						sf_floatwrite(&trans[0], ng*nt, params.shots);
+						MPI_Recv(&dobs[0], ng*nt, MPI_FLOAT, other_is / k, other_is, MPI_COMM_WORLD, &status);
+						sf_floatwrite(&dobs[0], ng*nt, params.shots);
 					}
 				}
 			}
 			else {
-				MPI_Isend(&trans[local_is * ng * nt], ng*nt, MPI_FLOAT, 0, is, MPI_COMM_WORLD, &request);
+				MPI_Isend(&dobs[local_is * ng * nt], ng*nt, MPI_FLOAT, 0, is, MPI_COMM_WORLD, &request);
 			}
 		}
 
+    matrix_transpose(&dobs_trans_t[0], &dobs_t[local_is * ng * nt], ng, nt);
+		if(np == 1) {
+			sf_floatwrite(&dobs_t[local_is * ng * nt], ng*nt, params.shots_bg);
+		}
+		else {
+			if(rank == 0) {
+				sf_floatwrite(&dobs_t[local_is * ng * nt], ng*nt, params.shots_bg);
+				printf("dobs_t[0] = %f\n", dobs_t[local_is * ng * nt]);
+				if(is == rank * k + ntask - 1) {
+					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
+						MPI_Recv(&dobs_t[0], ng*nt, MPI_FLOAT, other_is / k, other_is + OFFSET, MPI_COMM_WORLD, &status);
+						sf_floatwrite(&dobs_t[0], ng*nt, params.shots_bg);
+					}
+				}
+			}
+			else {
+				MPI_Isend(&dobs_t[local_is * ng * nt], ng*nt, MPI_FLOAT, 0, is + OFFSET, MPI_COMM_WORLD, &request);
+			}
+		}
     INFO() << format("shot %d, elapsed time %fs") % is % timer.elapsed();
   }
 
