@@ -5,8 +5,8 @@
  *      Author: rice
  */
 
-#ifndef SRC_ESS_FWI2D_UPDATESTEPLENOP_H_
-#define SRC_ESS_FWI2D_UPDATESTEPLENOP_H_
+#ifndef SRC_FWI2D_UPDATESTEPLENOP_H_
+#define SRC_FWI2D_UPDATESTEPLENOP_H_
 
 #include <vector>
 #include "damp4t10d.h"

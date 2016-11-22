@@ -5,8 +5,8 @@
  *      Author: rice
  */
 
-#ifndef SRC_ESS_FWI2D_ESSFWIFRAMEWORK_H_
-#define SRC_ESS_FWI2D_ESSFWIFRAMEWORK_H_
+#ifndef SRC_FWI2D_FWIFRAMEWORK_H_
+#define SRC_FWI2D_FWIFRAMEWORK_H_
 
 #include "damp4t10d.h"
 #include "fwiupdatevelop.h"
@@ -24,10 +24,10 @@ public:
   float getUpdateObj() const;
   float getInitObj() const;
 
-private:
+protected:
   static const int ESS_SEED = 1;
 
-private:
+protected:
   Damp4t10d &fmMethod;
   FwiUpdateSteplenOp updateStenlelOp;
   const FwiUpdateVelOp &updateVelOp;
@@ -35,7 +35,7 @@ private:
   const std::vector<float> &dobs; /// actual observed data (nt*ng*ns)
   RandomCodes essRandomCodes;
 
-private: /// propagate from other construction
+protected: /// propagate from other construction
   int ns;
   int ng;
   int nt;
@@ -44,7 +44,7 @@ private: /// propagate from other construction
   float dx;
   float dt;
 
-private:
+protected:
   std::vector<float> g0;               /// gradient in previous step
   std::vector<float> updateDirection;
   float updateobj;

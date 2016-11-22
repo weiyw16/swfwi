@@ -278,14 +278,8 @@ void calgradient(const Damp4t10d &fmMethod,
 FtiFramework::FtiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSteplenOp,
     const FwiUpdateVelOp &_updateVelOp,
     const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
-    fmMethod(method), updateStenlelOp(updateSteplenOp), updateVelOp(_updateVelOp), wlt(_wlt), dobs(_dobs),
-    essRandomCodes(ESS_SEED),
-    ns(method.getns()), ng(method.getng()), nt(method.getnt()),
-    nx(method.getnx()), nz(method.getnz()), dx(method.getdx()), dt(method.getdt()),
-    updateobj(0), initobj(0)
+    FwiFramework(method, updateSteplenOp, _updateVelOp, _wlt, _dobs)
 {
-  g0.resize(nx*nz, 0);
-  updateDirection.resize(nx*nz, 0);
 }
 
 void FtiFramework::epoch(int iter) {
@@ -299,7 +293,7 @@ void FtiFramework::epoch(int iter) {
 	shot_begin = rank * k;
 	shot_end = shot_begin + ntask;
 	float local_obj1 = 0.0f, obj1 = 0.0f;
-	int H = 20;
+	int H = 60;
 	std::vector<float> g1(2 * H * nx * nz, 0);
 	std::vector<float> g2(2 * H * nx * nz, 0);
 
@@ -479,17 +473,4 @@ void FtiFramework::epoch(int iter) {
 
 	//fmMethod.refillBoundary(&exvel.dat[0]);
 
-}
-
-
-void FtiFramework::writeVel(sf_file file) const {
-	fmMethod.sfWriteVel(fmMethod.getVelocity().dat, file);
-}
-
-float FtiFramework::getUpdateObj() const {
-	return updateobj;
-}
-
-float FtiFramework::getInitObj() const {
-	return initobj;
 }
