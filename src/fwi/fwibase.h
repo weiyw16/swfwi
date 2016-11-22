@@ -14,7 +14,10 @@ class FwiBase {
 public:
   FwiBase(Damp4t10d &fmMethod, const std::vector<float> &wlt,
                   const std::vector<float> &dobs);
-
+	void cross_correlation(float *src_wave, float *vsrc_wave, float *image, int model_size, float scale);
+	void transVsrc(std::vector<float> &vsrc, int nt, int ng);
+	void updateGrad(float *pre_gradient, const float *cur_gradient, float *update_direction, int model_size, int iter);
+	void second_order_virtual_source_forth_accuracy(float *vsrc, int num);
   void writeVel(sf_file file) const;
   float getUpdateObj() const;
   float getInitObj() const;

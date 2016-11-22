@@ -20,6 +20,19 @@ public:
                   const FwiUpdateVelOp &updateVelOp, const std::vector<float> &wlt,
                   const std::vector<float> &dobs);
   void epoch(int iter);
+	void calgradient(const Damp4t10d &fmMethod,
+    const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &I,
+    std::vector<float> &gd,
+    int nt, float dt,
+		int shot_id, int rank, int H);
+	void image_born(const Damp4t10d &fmMethod, const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &g0,
+    int nt, float dt,
+		int shot_id, int rank, int H);
+	void cross_correlation(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H);
 
 };
 

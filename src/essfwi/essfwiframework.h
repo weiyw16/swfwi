@@ -21,6 +21,10 @@ public:
                   const std::vector<float> &dobs);
 
   void epoch(int iter, float lambdaX = 0, float lambdaZ = 0);
+	void calgradient(const Damp4t10d &fmMethod, const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &g0,
+    int nt, float dt);
 
 private:
   static const int ESS_SEED = 1;

@@ -35,246 +35,6 @@ extern "C"
 #include "parabola-vertex.h"
 #include "ftiframework.h"
 
-#include "aux.h"
-
-namespace {
-
-void updateGrad(float *pre_gradient, const float *cur_gradient, float *update_direction,
-                           int model_size, int iter) {
-  if (iter == 0) {
-    std::copy(cur_gradient, cur_gradient + model_size, update_direction);
-    std::copy(cur_gradient, cur_gradient + model_size, pre_gradient);
-  } else {
-    float beta = 0.0f;
-    float a = 0.0f;
-    float b = 0.0f;
-    float c = 0.0f;
-    int   i = 0;
-    for (i = 0; i < model_size; i ++) {
-      a += (cur_gradient[i] * cur_gradient[i]);
-      b += (cur_gradient[i] * pre_gradient[i]);
-      c += (pre_gradient[i] * pre_gradient[i]);
-    }
-
-    beta = (a - b) / c;
-
-    if (beta < 0.0f) {
-      beta = 0.0f;
-    }
-
-    for (i = 0; i < model_size; i ++) {
-      update_direction[i] = cur_gradient[i] + beta * update_direction[i];
-    }
-
-    TRACE() << "Save current gradient to pre_gradient for the next iteration's computation";
-    std::copy(cur_gradient, cur_gradient + model_size, pre_gradient);
-  }
-}
-
-
-void second_order_virtual_source_forth_accuracy(float *vsrc, int num) {
-  float *tmp_vsrc = (float *)malloc(num * sizeof(float));
-  memcpy(tmp_vsrc, vsrc, num * sizeof(float));
-  int i = 0;
-  for (i = 0; i < num; i ++) {
-    if ( i <= 1) {
-      vsrc[i] = 0.0f;
-      continue;
-    }
-
-    if ( (num - 1) == i || (num - 2) == i) {
-      vsrc[i] = 0.0f;
-      continue;
-    }
-
-    vsrc[i] = -1. / 12 * tmp_vsrc[i - 2] + 4. / 3 * tmp_vsrc[i - 1] -
-              2.5 * tmp_vsrc[i] + 4. / 3 * tmp_vsrc[i + 1] - 1. / 12 * tmp_vsrc[i + 2];
-  }
-
-  free(tmp_vsrc);
-}
-
-void transVsrc(std::vector<float> &vsrc, int nt, int ng) {
-  for (int ig = 0; ig < ng; ig++) {
-    second_order_virtual_source_forth_accuracy(&vsrc[ig * nt], nt);
-  }
-}
-
-void cross_correlation_born(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H) {
-	float t_src_wave, t_vsrc_wave;
-#pragma omp parallel for private(t_src_wave, t_vsrc_wave)
-	for(int h = -H ; h < H ; h ++) {
-		int ind = h + H;
-		for (int i = 0; i < nx ; i ++) {
-			for (int j = 0; j < nz ; j ++) {
-				t_src_wave = i + h < nx ? src_wave[(i + h) * nz + j] : 0;
-				t_src_wave = i + h >= 0 ? t_src_wave : 0;
-				t_vsrc_wave = i - h < nx ? vsrc_wave[(i - h) * nz + j] : 0;
-				t_vsrc_wave = i - h >= 0 ? t_vsrc_wave: 0;
-				image[ind * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
-			}
-		}
-	}
-}
-
-void image_born(const Damp4t10d &fmMethod,
-    const std::vector<float> &encSrc,
-    const std::vector<float> &vsrc,
-    std::vector<float> &g0,
-    int nt, float dt,
-		int shot_id, int rank, int H)
-{
-  int nx = fmMethod.getnx();
-  int nz = fmMethod.getnz();
-  int ns = fmMethod.getns();
-  int ng = fmMethod.getng();
-  const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
-  const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
-
-  std::vector<float> bndr = fmMethod.initBndryVector(nt);
-  std::vector<float> sp0(nz * nx, 0);
-  std::vector<float> sp1(nz * nx, 0);
-  std::vector<float> gp0(nz * nx, 0);
-  std::vector<float> gp1(nz * nx, 0);
-
-
-  ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
-
-  for(int it=0; it<nt; it++) {
-    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
-    std::swap(sp1, sp0);
-    fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
-  }
-
-  std::vector<float> vsrc_trans(ng * nt, 0.0f);
-  matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
-
-  for(int it = nt - 1; it >= 0 ; it--) {
-    fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
-    std::swap(sp0, sp1); //-test
-    fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
-    //std::swap(sp0, sp1); //-test
-    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
-
-    /**
-     * forward propagate receviers
-     */
-    fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
-    std::swap(gp1, gp0);
-
-    if (dt * it > 0.4) {
-      //printf("it = %d, cross 1\n", it);
-      cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
-      //printf("it = %d, cross 2\n", it);
-    } else if (dt * it > 0.3) {
-      //printf("it = %d, cross 3\n", it);
-      cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, (dt * it - 0.3) / 0.1, H);
-      //printf("it = %d, cross 4\n", it);
-    } else {
-      //printf("it = %d, cross 5\n");
-      break;
-    }
-    //cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
- }
-}
-
-void calgradient(const Damp4t10d &fmMethod,
-    const std::vector<float> &encSrc,
-    const std::vector<float> &vsrc,
-    std::vector<float> &I,
-    std::vector<float> &gd,
-    int nt, float dt,
-		int shot_id, int rank, int H)
-{
-  int nx = fmMethod.getnx();
-  int nz = fmMethod.getnz();
-  int ns = fmMethod.getns();
-  int ng = fmMethod.getng();
-  const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
-  const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
-
-  std::vector<float> bndr = fmMethod.initBndryVector(nt);
-  std::vector<float> sp0(nz * nx, 0);
-  std::vector<float> sp1(nz * nx, 0);
-  std::vector<float> gp0(nz * nx, 0);
-  std::vector<float> gp1(nz * nx, 0);
-
-	std::vector<float> ps(nt * nx * nz, 0);
-	std::vector<float> pg(nt * nx * nz, 0);
-
-  ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
-
-  for(int it=0; it<nt; it++) {
-    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
-    std::swap(sp1, sp0);
-		for(int ix = 0 ; ix < nx ; ix ++)
-			for(int iz = 0 ; iz < nz ; iz ++)
-				ps[it * nx * nz + ix * nz + iz] = sp1[ix * nz + iz] - sp0[ix * nz + iz];
-  }
-
-  std::vector<float> vsrc_trans(ng * nt, 0.0f);
-  matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
-
-  for(int it = nt - 1; it >= 0 ; it--) {
-    //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
-    //std::swap(sp0, sp1); -test
-    fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
-    std::swap(sp0, sp1);	//-test
-    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
-
-    /**
-     * forward propagate receviers
-     */
-    fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
-    std::swap(gp1, gp0);
-		for(int ix = 0 ; ix < nx ; ix ++)
-			for(int iz = 0 ; iz < nz ; iz ++)
-				pg[it * nx * nz + ix * nz + iz] = gp1[ix * nz + iz] - gp0[ix * nz + iz];
-	}
-
-	sp0.assign(nx * nz, 0);
-	sp1.assign(nx * nz, 0);
-	gp0.assign(nx * nz, 0);
-	gp1.assign(nx * nz, 0);
-
-	const Velocity &exvel = fmMethod.getVelocity();
-
-	for(int it=0; it<nt; it++) {
-		for(int h = 0 ; h < H ; h ++)
-			for(int ix = 0 ; ix < nx ; ix ++) 
-				for(int iz = 0 ; iz < nz ; iz ++) 
-					sp1[ix * nz + iz] += ps[it * nx * nz + (ix + 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix + h) * nz + iz];
-		fmMethod.stepForward(&sp0[0], &sp1[0]);
-		std::swap(sp1, sp0);
-		for(int ix = 0 ; ix < nx ; ix ++) 
-			for(int iz = 0 ; iz < nz ; iz ++) 
-				gd[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
-	}
-
-	for(int it = nt - 1; it >= 0 ; it--) {
-		for(int h = 0 ; h < H ; h ++)
-			for(int ix = 0 ; ix < nx ; ix ++)
-				for(int iz = 0 ; iz < nz ; iz ++)
-					gp1[ix * nz + iz] += pg[(nt - (it - 1)) * nx * nz + (ix - 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix - h) * nz + iz];
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
-    std::swap(gp1, gp0);
-		for(int ix = 0 ; ix < nx ; ix ++) 
-			for(int iz = 0 ; iz < nz ; iz ++) 
-				gd[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
-	}
-
-
-}
-
-} /// end of namespace
-
-
 FtiFramework::FtiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSteplenOp,
     const FwiUpdateVelOp &_updateVelOp,
     const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
@@ -474,3 +234,174 @@ void FtiFramework::epoch(int iter) {
 	//fmMethod.refillBoundary(&exvel.dat[0]);
 
 }
+
+void FtiFramework::calgradient(const Damp4t10d &fmMethod,
+    const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &I,
+    std::vector<float> &gd,
+    int nt, float dt,
+		int shot_id, int rank, int H)
+{
+  int nx = fmMethod.getnx();
+  int nz = fmMethod.getnz();
+  int ns = fmMethod.getns();
+  int ng = fmMethod.getng();
+  const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
+  const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
+
+  std::vector<float> bndr = fmMethod.initBndryVector(nt);
+  std::vector<float> sp0(nz * nx, 0);
+  std::vector<float> sp1(nz * nx, 0);
+  std::vector<float> gp0(nz * nx, 0);
+  std::vector<float> gp1(nz * nx, 0);
+
+	std::vector<float> ps(nt * nx * nz, 0);
+	std::vector<float> pg(nt * nx * nz, 0);
+
+  ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
+
+  for(int it=0; it<nt; it++) {
+    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    std::swap(sp1, sp0);
+		for(int ix = 0 ; ix < nx ; ix ++)
+			for(int iz = 0 ; iz < nz ; iz ++)
+				ps[it * nx * nz + ix * nz + iz] = sp1[ix * nz + iz] - sp0[ix * nz + iz];
+  }
+
+  std::vector<float> vsrc_trans(ng * nt, 0.0f);
+  matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
+
+  for(int it = nt - 1; it >= 0 ; it--) {
+    //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
+    //std::swap(sp0, sp1); -test
+    fmMethod.stepBackward(&sp0[0], &sp1[0]);
+    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    std::swap(sp0, sp1);	//-test
+    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
+
+    /**
+     * forward propagate receviers
+     */
+    fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
+    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    std::swap(gp1, gp0);
+		for(int ix = 0 ; ix < nx ; ix ++)
+			for(int iz = 0 ; iz < nz ; iz ++)
+				pg[it * nx * nz + ix * nz + iz] = gp1[ix * nz + iz] - gp0[ix * nz + iz];
+	}
+
+	sp0.assign(nx * nz, 0);
+	sp1.assign(nx * nz, 0);
+	gp0.assign(nx * nz, 0);
+	gp1.assign(nx * nz, 0);
+
+	const Velocity &exvel = fmMethod.getVelocity();
+
+	for(int it=0; it<nt; it++) {
+		for(int h = 0 ; h < H ; h ++)
+			for(int ix = 0 ; ix < nx ; ix ++) 
+				for(int iz = 0 ; iz < nz ; iz ++) 
+					sp1[ix * nz + iz] += ps[it * nx * nz + (ix + 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix + h) * nz + iz];
+		fmMethod.stepForward(&sp0[0], &sp1[0]);
+		std::swap(sp1, sp0);
+		for(int ix = 0 ; ix < nx ; ix ++) 
+			for(int iz = 0 ; iz < nz ; iz ++) 
+				gd[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+	}
+
+	for(int it = nt - 1; it >= 0 ; it--) {
+		for(int h = 0 ; h < H ; h ++)
+			for(int ix = 0 ; ix < nx ; ix ++)
+				for(int iz = 0 ; iz < nz ; iz ++)
+					gp1[ix * nz + iz] += pg[(nt - (it - 1)) * nx * nz + (ix - 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix - h) * nz + iz];
+    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    std::swap(gp1, gp0);
+		for(int ix = 0 ; ix < nx ; ix ++) 
+			for(int iz = 0 ; iz < nz ; iz ++) 
+				gd[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+	}
+}
+
+void FtiFramework::image_born(const Damp4t10d &fmMethod,
+    const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &g0,
+    int nt, float dt,
+		int shot_id, int rank, int H)
+{
+  int nx = fmMethod.getnx();
+  int nz = fmMethod.getnz();
+  int ns = fmMethod.getns();
+  int ng = fmMethod.getng();
+  const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
+  const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
+
+  std::vector<float> bndr = fmMethod.initBndryVector(nt);
+  std::vector<float> sp0(nz * nx, 0);
+  std::vector<float> sp1(nz * nx, 0);
+  std::vector<float> gp0(nz * nx, 0);
+  std::vector<float> gp1(nz * nx, 0);
+
+
+  ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
+
+  for(int it=0; it<nt; it++) {
+    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    std::swap(sp1, sp0);
+    fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
+  }
+
+  std::vector<float> vsrc_trans(ng * nt, 0.0f);
+  matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
+
+  for(int it = nt - 1; it >= 0 ; it--) {
+    fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
+    std::swap(sp0, sp1); //-test
+    fmMethod.stepBackward(&sp0[0], &sp1[0]);
+    //fmMethod.subEncodedSource(&sp0[0], &encSrc[it]);
+    //std::swap(sp0, sp1); //-test
+    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
+
+    /**
+     * forward propagate receviers
+     */
+    fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
+    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    std::swap(gp1, gp0);
+
+    if (dt * it > 0.4) {
+      //printf("it = %d, cross 1\n", it);
+      cross_correlation(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
+      //printf("it = %d, cross 2\n", it);
+    } else if (dt * it > 0.3) {
+      //printf("it = %d, cross 3\n", it);
+      cross_correlation(&sp0[0], &gp0[0], &g0[0], nx, nz, (dt * it - 0.3) / 0.1, H);
+      //printf("it = %d, cross 4\n", it);
+    } else {
+      //printf("it = %d, cross 5\n");
+      break;
+    }
+    //cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
+ }
+}
+
+void FtiFramework::cross_correlation(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H) {
+	float t_src_wave, t_vsrc_wave;
+#pragma omp parallel for private(t_src_wave, t_vsrc_wave)
+	for(int h = -H ; h < H ; h ++) {
+		int ind = h + H;
+		for (int i = 0; i < nx ; i ++) {
+			for (int j = 0; j < nz ; j ++) {
+				t_src_wave = i + h < nx ? src_wave[(i + h) * nz + j] : 0;
+				t_src_wave = i + h >= 0 ? t_src_wave : 0;
+				t_vsrc_wave = i - h < nx ? vsrc_wave[(i - h) * nz + j] : 0;
+				t_vsrc_wave = i - h >= 0 ? t_vsrc_wave: 0;
+				image[ind * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
+			}
+		}
+	}
+}
+

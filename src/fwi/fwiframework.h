@@ -20,6 +20,13 @@ public:
                   const FwiUpdateVelOp &updateVelOp, const std::vector<float> &wlt,
                   const std::vector<float> &dobs);
 	void epoch(int iter);
+	void calgradient(const Damp4t10d &fmMethod,
+    const std::vector<float> &encSrc,
+    const std::vector<float> &vsrc,
+    std::vector<float> &g0,
+    int nt, float dt,
+		int shot_id, int rank);
+
 
 protected:
   FwiUpdateSteplenOp updateStenlelOp;
