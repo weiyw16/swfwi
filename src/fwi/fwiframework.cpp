@@ -230,14 +230,8 @@ void calgradient(const Damp4t10d &fmMethod,
 FwiFramework::FwiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSteplenOp,
     const FwiUpdateVelOp &_updateVelOp,
     const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
-    fmMethod(method), updateStenlelOp(updateSteplenOp), updateVelOp(_updateVelOp), wlt(_wlt), dobs(_dobs),
-    essRandomCodes(ESS_SEED),
-    ns(method.getns()), ng(method.getng()), nt(method.getnt()),
-    nx(method.getnx()), nz(method.getnz()), dx(method.getdx()), dt(method.getdt()),
-    updateobj(0), initobj(0)
+    FwiBase(method, _wlt, _dobs), updateStenlelOp(updateSteplenOp), updateVelOp(_updateVelOp)
 {
-  g0.resize(nx*nz, 0);
-  updateDirection.resize(nx*nz, 0);
 }
 
 void FwiFramework::epoch(int iter) {
@@ -489,17 +483,4 @@ void FwiFramework::epoch(int iter) {
 
 	//fmMethod.refillBoundary(&exvel.dat[0]);
 
-}
-
-
-void FwiFramework::writeVel(sf_file file) const {
-	fmMethod.sfWriteVel(fmMethod.getVelocity().dat, file);
-}
-
-float FwiFramework::getUpdateObj() const {
-	return updateobj;
-}
-
-float FwiFramework::getInitObj() const {
-	return initobj;
 }

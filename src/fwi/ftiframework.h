@@ -1,8 +1,8 @@
 /*
- * essfwiframework.h
+ * ftiframework.h
  *
- *  Created on: Mar 10, 2016
- *      Author: rice
+ *  Created on: Nov 22, 2016
+ *      Author: cbw
  */
 
 #ifndef SRC_FWI2D_FTIFRAMEWORK_H_
