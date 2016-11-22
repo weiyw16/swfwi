@@ -16,10 +16,11 @@ include_dir = [
   '#' + dirs['rsf'],
   '#' + dirs['common'],
   '#' + dirs['modeling'],
+  '#' + dirs['fwi'],
 ]
 
 depend_libpath = []
-depend_libs = ['modeling', 'common']
+depend_libs = ['modeling', 'common', 'fwi']
 
 cflags = []
 if compiler_set == 'sw':

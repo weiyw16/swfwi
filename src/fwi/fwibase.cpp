@@ -1,8 +1,8 @@
 /*
- * essfwiframework.cpp
+ * fwibase.cpp
  *
- *  Created on: Mar 10, 2016
- *      Author: rice
+ *  Created on: Nov 22, 2016
+ *      Author: cbw
  */
 
 
@@ -33,11 +33,9 @@ extern "C"
 #include "velocity.h"
 #include "sfutil.h"
 #include "parabola-vertex.h"
-#include "essfwiframework.h"
+#include "fwibase.h"
 
 #include "aux.h"
-#include "ReguFactor.h"
-
 
 namespace {
 
@@ -97,16 +95,9 @@ void second_order_virtual_source_forth_accuracy(float *vsrc, int num) {
 }
 
 void transVsrc(std::vector<float> &vsrc, int nt, int ng) {
-	/*
-  std::vector<float> trans(nt * ng);
-  matrix_transpose(&vsrc[0], &trans[0], ng, nt);
-	*/
   for (int ig = 0; ig < ng; ig++) {
-    //second_order_virtual_source_forth_accuracy(&trans[ig * nt], nt);
     second_order_virtual_source_forth_accuracy(&vsrc[ig * nt], nt);
   }
-
-  //matrix_transpose(&trans[0], &vsrc[0], nt, ng);
 }
 
 void cross_correlation(float *src_wave, float *vsrc_wave, float *image, int model_size, float scale) {
@@ -120,7 +111,8 @@ void calgradient(const Damp4t10d &fmMethod,
     const std::vector<float> &encSrc,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,
-    int nt, float dt)
+    int nt, float dt,
+		int shot_id, int rank)
 {
   int nx = fmMethod.getnx();
   int nz = fmMethod.getnz();
@@ -136,21 +128,75 @@ void calgradient(const Damp4t10d &fmMethod,
   std::vector<float> gp1(nz * nx, 0);
 
 
-  for(int it=0; it<nt; it++) {
-    fmMethod.addSource(&sp1[0], &encSrc[it * ns], allSrcPos);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
-    std::swap(sp1, sp0);
-    fmMethod.writeBndry(&bndr[0], &sp0[0], it);
-  }
+  ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
-  std::vector<float> vsrc_trans(nt * ng, 0);
+  for(int it=0; it<nt; it++) {
+    fmMethod.addSource(&sp1[0], &encSrc[it], curSrcPos);
+    //printf("it = %d, forward 1\n", it);
+    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    //printf("it = %d, forward 2\n", it);
+    std::swap(sp1, sp0);
+    //fmMethod.writeBndry(&bndr[0], &sp0[0], it); -test
+		const int check_step = 5;
+    if ((it > 0) && (it != (nt - 1)) && !(it % check_step)) {
+      char check_file_name1[64];
+      char check_file_name2[64];
+      sprintf(check_file_name1, "./rank_%d_check_time_%d_1.su", rank, it);
+      sprintf(check_file_name2, "./rank_%d_check_time_%d_2.su", rank, it);
+			FILE *f1 = fopen(check_file_name1, "wb");
+			FILE *f2 = fopen(check_file_name2, "wb");
+			fwrite(&sp0[0], sizeof(float), nx * nz, f1);
+			fwrite(&sp1[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+    }
+  }
+	char check_file_name1[64];
+	char check_file_name2[64];
+	sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
+	sprintf(check_file_name2, "./rank_%d_check_time_last_2.su", rank);
+	FILE *f1 = fopen(check_file_name1, "wb");
+	FILE *f2 = fopen(check_file_name2, "wb");
+	fwrite(&sp0[0], sizeof(float), nx * nz, f1);
+	fwrite(&sp1[0], sizeof(float), nx * nz, f2);
+	fclose(f1);
+	fclose(f2);
+
+  std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
   for(int it = nt - 1; it >= 0 ; it--) {
-    fmMethod.readBndry(&bndr[0], &sp0[0], it);
-    std::swap(sp0, sp1);
+    //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
+		const int check_step = 5;
+		if(it == nt - 1)
+		{
+			char check_file_name1[64];
+			char check_file_name2[64];
+			sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
+			sprintf(check_file_name2, "./rank_%d_check_time_last_2.su", rank);
+			FILE *f1 = fopen(check_file_name1, "rb");
+			FILE *f2 = fopen(check_file_name2, "rb");
+			fread(&sp1[0], sizeof(float), nx * nz, f1);
+			fread(&sp0[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+		}
+		else if ((check_step > 0) && !(it % check_step) && (it != 0)) {
+			char check_file_name1[64];
+			char check_file_name2[64];
+			sprintf(check_file_name1, "./rank_%d_check_time_%d_1.su", rank, it);
+			sprintf(check_file_name2, "./rank_%d_check_time_%d_2.su", rank, it);
+			FILE *f1 = fopen(check_file_name1, "rb");
+			FILE *f2 = fopen(check_file_name2, "rb");
+			fread(&sp1[0], sizeof(float), nx * nz, f1);
+			fread(&sp0[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+		}
+
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
-    fmMethod.subEncodedSource(&sp0[0], &encSrc[it * ns]);
+    std::swap(sp0, sp1);	//-test
+    fmMethod.subSource(&sp0[0], &encSrc[it], curSrcPos);
 
     /**
      * forward propagate receviers
@@ -172,65 +218,24 @@ void calgradient(const Damp4t10d &fmMethod,
 } /// end of namespace
 
 
-EssFwiFramework::EssFwiFramework(Damp4t10d &method, const UpdateSteplenOp &updateSteplenOp,
-    const UpdateVelOp &_updateVelOp,
-    const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
-    FwiBase(method, _wlt, _dobs), updateStenlelOp(updateSteplenOp), updateVelOp(_updateVelOp), essRandomCodes(ESS_SEED)
+FwiBase::FwiBase(Damp4t10d &method, const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
+    fmMethod(method), wlt(_wlt), dobs(_dobs),
+    ns(method.getns()), ng(method.getng()), nt(method.getnt()),
+    nx(method.getnx()), nz(method.getnz()), dx(method.getdx()), dt(method.getdt()),
+    updateobj(0), initobj(0)
 {
+  g0.resize(nx*nz, 0);
+  updateDirection.resize(nx*nz, 0);
 }
 
-void EssFwiFramework::epoch(int iter, float lambdaX, float lambdaZ) {
-  // create random codes
-  const std::vector<int> encodes = essRandomCodes.genPlus1Minus1(ns);
+void FwiBase::writeVel(sf_file file) const {
+	fmMethod.sfWriteVel(fmMethod.getVelocity().dat, file);
+}
 
-  std::stringstream ss;
-  std::copy(encodes.begin(), encodes.end(), std::ostream_iterator<int>(ss, " "));
-  DEBUG() << "code is: " << ss.str();
+float FwiBase::getUpdateObj() const {
+	return updateobj;
+}
 
-  Encoder encoder(encodes);
-  std::vector<float> encsrc  = encoder.encodeSource(wlt);
-  std::vector<float> encobs_trans = encoder.encodeObsData(dobs, nt, ng);
-  std::vector<float> encobs(nt * ng, 0);
-	matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
-
-  std::vector<float> dcal_trans(nt * ng, 0);
-  std::vector<float> dcal(nt * ng, 0);
-  fmMethod.EssForwardModeling(encsrc, dcal_trans);
-	matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
-  fmMethod.removeDirectArrival(&encobs[0]);
-  fmMethod.removeDirectArrival(&dcal[0]);
-
-  std::vector<float> vsrc(nt * ng, 0);
-  vectorMinus(encobs, dcal, vsrc);
-  float obj1 = cal_objective(&vsrc[0], vsrc.size());
-  initobj = iter == 0 ? obj1 : initobj;
-  DEBUG() << format("obj: %e") % obj1;
-
-    Velocity &exvel = fmMethod.getVelocity();
-    if (!(lambdaX == 0 && lambdaZ == 0)) {
-      ReguFactor fac(&exvel.dat[0], nx, nz, lambdaX, lambdaZ);
-      obj1 += fac.getReguTerm();
-    }
-
-
-  transVsrc(vsrc, nt, ng);
-
-  std::vector<float> g1(nx * nz, 0);
-  calgradient(fmMethod, encsrc, vsrc, g1, nt, dt);
-
-  DEBUG() << format("grad %.20f") % sum(g1);
-
-  fmMethod.scaleGradient(&g1[0]);
-  fmMethod.maskGradient(&g1[0]);
-
-  updateGrad(&g0[0], &g1[0], &updateDirection[0], g0.size(), iter);
-
-  updateStenlelOp.bindEncSrcObs(encsrc, encobs);
-  float steplen;
-  updateStenlelOp.calsteplen(updateDirection, obj1, iter, lambdaX, lambdaZ, steplen, updateobj);
-
-//  Velocity &exvel = fmMethod.getVelocity();
-  updateVelOp.update(exvel, exvel, updateDirection, steplen);
-
-  fmMethod.refillBoundary(&exvel.dat[0]);
+float FwiBase::getInitObj() const {
+	return initobj;
 }
