@@ -35,6 +35,7 @@ public:
 
 public:
   sf_file vinit;        /* initial velocity model, unit=m/s */
+  sf_file vreal;        /* real	velocity model, unit=m/s */
   sf_file shots;        /* recorded shots from exact velocity model */
   sf_file vupdates;     /* updated velocity in iterations */
   sf_file absobjs;         /* absolute values of objective function in iterations */
@@ -76,6 +77,7 @@ public:
 
 Params::Params() {
   vinit = sf_input ("vin");       /* initial velocity model, unit=m/s */
+  vreal	= sf_input ("vreal");       /* initial velocity model, unit=m/s */
   shots = sf_input("shots");      /* recorded shots from exact velocity model */
   vupdates = sf_output("vout");   /* updated velocity in iterations */
   absobjs = sf_output("absobjs"); /* absolute values of objective function in iterations */
@@ -194,7 +196,10 @@ int main(int argc, char *argv[]) {
   SfVelocityReader velReader(params.vinit);
   Velocity v0 = SfVelocityReader::read(params.vinit, nx, nz);
   Velocity exvel = fmMethod.expandDomain(v0);
+  Velocity v0_t = SfVelocityReader::read(params.vreal, nx, nz);
+  Velocity exvel_real = fmMethod.expandDomain(v0_t);
   fmMethod.bindVelocity(exvel);
+  fmMethod.bindRealVelocity(exvel_real);
 
   std::vector<float> wlt(nt);
   rickerWavelet(&wlt[0], nt, fm, dt, params.amp);

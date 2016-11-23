@@ -262,7 +262,6 @@ int main(int argc, char* argv[]) {
 		else {
 			if(rank == 0) {
 				sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
-				printf("dobs[0] = %f\n", dobs[local_is * ng * nt]);
 				if(is == rank * k + ntask - 1) {
 					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
 						MPI_Recv(&dobs[0], ng*nt, MPI_FLOAT, other_is / k, other_is, MPI_COMM_WORLD, &status);

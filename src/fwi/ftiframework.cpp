@@ -53,7 +53,7 @@ void FtiFramework::epoch(int iter) {
 	shot_end = shot_begin + ntask;
 	float local_obj1 = 0.0f, obj1 = 0.0f;
 	int H = 60;
-	std::vector<float> g1(2 * H * nx * nz, 0);
+	std::vector<float> img(2 * H * nx * nz, 0);
 	std::vector<float> g2(2 * H * nx * nz, 0);
 
 	sf_file sf_g2;
@@ -79,6 +79,7 @@ void FtiFramework::epoch(int iter) {
 		std::vector<float> dcal(nt * ng, 0);
 		std::vector<float> dcal_trans(ng * nt, 0.0f);
 		fmMethod.FwiForwardModeling(wlt, dcal_trans, is);
+		//fmMethod.BornForwardModeling(fmMethod.getVelocityDiff(), wlt, dcal_trans, is);
 		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
 
 		INFO() << dcal[0];
@@ -94,47 +95,55 @@ void FtiFramework::epoch(int iter) {
 		vectorMinus(encobs, dcal, vsrc);
 		local_obj1 += cal_objective(&vsrc[0], vsrc.size());
 		initobj = iter == 0 ? local_obj1 : initobj;
-		//DEBUG() << format("obj: %e") % obj1;
 		INFO() << "obj: " << local_obj1 << "\n";
 
 		transVsrc(vsrc, nt, ng);
 
 		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
-		//std::copy(dcal.begin(), dcal.end(), vsrc.begin());	//-test
 
 		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
 
-		g1.assign(2 * H * nx * nz, 0.0f);
-		//std::vector<float> g1(nx * nz, 0);
-		image_born(fmMethod, wlt, vsrc, g1, nt, dt, is, rank, H);
+		img.assign(2 * H * nx * nz, 0.0f);
+		image_born(fmMethod, wlt, vsrc, img, nt, dt, is, rank, H);
 
-		DEBUG() << ("sum grad: ") << std::accumulate(&g1[H * nx * nz], &g1[(H + 1) * nx * nz], 0.0f);
+		DEBUG() << ("sum grad: ") << std::accumulate(&img[H * nx * nz], &img[(H + 1) * nx * nz], 0.0f);
 
-		//fmMethod.scaleGradient(&g1[0]);
-		fmMethod.bornMaskGradient(&g1[0], H);
+		//fmMethod.scaleGradient(&img[0]);
+		fmMethod.bornMaskGradient(&img[0], H);
 
-		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
+		std::transform(g2.begin(), g2.end(), img.begin(), g2.begin(), std::plus<float>());
 
 		DEBUG() << ("global grad: ") << std::accumulate(&g2[H * nx * nz], &g2[(H + 1) * nx * nz], 0.0f);
 	}
 
-	g1.assign(2 * H * nx * nz, 0.0f);
-	MPI_Allreduce(&g2[0], &g1[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+	img.assign(2 * H * nx * nz, 0.0f);
+	MPI_Allreduce(&g2[0], &img[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 	MPI_Allreduce(&local_obj1, &obj1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
 	if(rank == 0)
 	{
-		DEBUG() << ("****** global grad: ") << std::accumulate(&g1[H * nx * nz], &g1[(H + 1) * nx * nz], 0.0f);
+		DEBUG() << ("****** global grad: ") << std::accumulate(&img[H * nx * nz], &img[(H + 1) * nx * nz], 0.0f);
 		DEBUG() << format("****** sum obj: %.20f") % obj1;
 	}
 
 	if(rank == 0 && iter == 0)
 	{
-		sf_floatwrite(&g1[0], 2 * H * nx * nz, sf_g2);
+		sf_floatwrite(&img[0], 2 * H * nx * nz, sf_g2);
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	exit(1);
+
+	/*
+	std::vector<float> img0(2 * H * nx * nz, 0.0f);
+	sf_file sf_img0 = sf_input("g2.rsf");
+	sf_floatread(&img0[0], 2 * H * nx * nz, sf_img0);
+
+	sf_file sf_img1 = sf_output("g2.rsf");
+	sf_putint(sf_img1, "n1", nz);
+	sf_putint(sf_img1, "n2", nx);
+	sf_floatread(&img0[0], 2 * H * nx * nz, sf_img1);
+	*/
 
 	std::vector<float> gd(nx * nz, 0);
 	std::vector<float> grad(nx * nz, 0);
@@ -144,8 +153,7 @@ void FtiFramework::epoch(int iter) {
 		std::vector<float> vsrc(ng * nt, 0);
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
-		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
-		calgradient(fmMethod, wlt, vsrc, g1, gd, nt, dt, is, rank, H);
+		calgradient(fmMethod, wlt, encobs, img, gd, nt, dt, is, rank, H);
 	}
 	MPI_Allreduce(&gd[0], &grad[0], gd.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
@@ -158,7 +166,7 @@ void FtiFramework::epoch(int iter) {
 
 	exit(1);
 
-	updateGrad(&g0[0], &g1[0], &updateDirection[0], g0.size(), iter);
+	updateGrad(&g0[0], &img[0], &updateDirection[0], g0.size(), iter);
 
 	/*
 		 if(rank == 0 && iter == 0)
@@ -237,7 +245,7 @@ void FtiFramework::epoch(int iter) {
 void FtiFramework::calgradient(const Damp4t10d &fmMethod,
     const std::vector<float> &wlt,
     const std::vector<float> &vsrc,
-    std::vector<float> &I,
+    std::vector<float> &img,
     std::vector<float> &gd,
     int nt, float dt,
 		int shot_id, int rank, int H)
@@ -273,12 +281,14 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
   for(int it = nt - 1; it >= 0 ; it--) {
+		/*
     //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
     //std::swap(sp0, sp1); -test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
     //fmMethod.subEncodedSource(&sp0[0], &wlt[it]);
     std::swap(sp0, sp1);	//-test
     fmMethod.subSource(&sp0[0], &wlt[it], curSrcPos);
+		*/
 
     /**
      * forward propagate receviers
@@ -291,18 +301,22 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 				pg[it * nx * nz + ix * nz + iz] = gp1[ix * nz + iz] - gp0[ix * nz + iz];
 	}
 
-	sp0.assign(nx * nz, 0);
-	sp1.assign(nx * nz, 0);
-	gp0.assign(nx * nz, 0);
-	gp1.assign(nx * nz, 0);
-
 	const Velocity &exvel = fmMethod.getVelocity();
 
+	sp0.assign(nx * nz, 0);
+	sp1.assign(nx * nz, 0);
+
+	float ps_t = 0, pg_t = 0, img_t = 0;
 	for(int it=0; it<nt; it++) {
-		for(int h = 0 ; h < H ; h ++)
+		for(int h = 0 ; h < H ; h ++) 
 			for(int ix = 0 ; ix < nx ; ix ++) 
-				for(int iz = 0 ; iz < nz ; iz ++) 
-					sp1[ix * nz + iz] += ps[it * nx * nz + (ix + 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix + h) * nz + iz];
+				for(int iz = 0 ; iz < nz ; iz ++) { 
+				ps_t = ix + 2 * h >= 0 ? ps[it * nx * nz + (ix + 2 * h) * nz + iz] : 0;
+				ps_t = ix + 2 * h < nx ? ps_t : 0;
+				img_t = ix + h >= 0 ? img[h * nx * nz + (ix + h) * nz + iz] : 0; 
+				img_t = ix + h < nx ? img_t : 0; 
+				sp1[ix * nz + iz] += ps_t * h * h * img_t;
+		}
 		fmMethod.stepForward(&sp0[0], &sp1[0]);
 		std::swap(sp1, sp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
@@ -310,11 +324,19 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 				gd[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
 
+	gp0.assign(nx * nz, 0);
+	gp1.assign(nx * nz, 0);
+
 	for(int it = nt - 1; it >= 0 ; it--) {
 		for(int h = 0 ; h < H ; h ++)
-			for(int ix = 0 ; ix < nx ; ix ++)
-				for(int iz = 0 ; iz < nz ; iz ++)
-					gp1[ix * nz + iz] += pg[(nt - (it - 1)) * nx * nz + (ix - 2 * h) * nz + iz] * h * h * I[h * nx * nz + (ix - h) * nz + iz];
+			for(int ix = 0 ; ix < nx ; ix ++) 
+					for(int iz = 0 ; iz < nz ; iz ++) {
+					pg_t = ix - 2 * h >= 0 ? pg[it * nx * nz + (ix - 2 * h) * nz + iz] : 0;
+					pg_t = ix - 2 * h < nx ? pg_t : 0;
+					img_t = ix - h >= 0 ? img[h * nx * nz + (ix - h) * nz + iz] : 0;
+					img_t = ix - h < nx ? img_t : 0;
+					gp1[ix * nz + iz] +=  pg_t * h * h * img_t;
+			}
     fmMethod.stepForward(&gp0[0], &gp1[0]);
     std::swap(gp1, gp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 

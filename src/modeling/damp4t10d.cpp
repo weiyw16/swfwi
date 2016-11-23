@@ -223,10 +223,6 @@ void Damp4t10d::addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullwv_t2, 
 				rp1[i * nz + j] += 2 * (fullwv_t2[i * nz + j] - fullwv_t1[i * nz + j]) / vel->dat[i * nz + j] * exvel_m[i * nz + j] / dt;
 	}
 	else if(it == nt - 1) {
-		/*
-		for(int i = 0 ; i < nx ; i ++)
-			for(int j = 0 ; j < nz ; j ++)
-			*/
 		for(int i = bx0 ; i < nx - bxn ; i ++)
 			for(int j = bz0 ; j < nz - bzn ; j ++)
 				rp1[i * nz + j] += 2 * (fullwv_t1[i * nz + j] - fullwv_t0[i * nz + j]) / vel->dat[i * nz + j] * exvel_m[i * nz + j] / dt;
@@ -246,6 +242,10 @@ void Damp4t10d::stepForward(float* p0, float* p1) const {
 
 void Damp4t10d::bindVelocity(const Velocity& _vel) {
   this->vel = &_vel;
+}
+
+void Damp4t10d::bindRealVelocity(const Velocity& _vel) {
+  this->vel_real = &_vel;
 }
 
 void Damp4t10d::recordSeis(float* seis_it, const float* p,
@@ -682,6 +682,13 @@ int Damp4t10d::getnz() const {
 
 Velocity& Damp4t10d::getVelocity() {
   return *const_cast<Velocity *>(vel);
+}
+
+const std::vector<float> Damp4t10d::getVelocityDiff() const
+{
+	std::vector<float> vel_m(vel->nx * vel->nz, 0.0f);
+	vectorMinus(vel_real->dat, vel->dat, vel_m);
+	return vel_m;
 }
 
 std::vector<float> Damp4t10d::initBndryVector(int nt) const {

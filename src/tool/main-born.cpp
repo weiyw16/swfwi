@@ -198,7 +198,8 @@ Params::Params() {
   sf_putint(shots_bg,"jgz",jgz);
   sf_putint(shots_bg, "nb", nb);
 
-  Velocity v = SfVelocityReader::read(vinit, nx, nz);
+	//!!!!!You should put the vmin and vmax of vreal not vinit to the shots, because fti will use it as input!!!!!!
+  Velocity v = SfVelocityReader::read(vreal, nx, nz);
   float vmin = *std::min_element(v.dat.begin(), v.dat.end());
   float vmax = *std::max_element(v.dat.begin(), v.dat.end());
   sf_putfloat(shots, "vmin", vmin);
@@ -366,7 +367,6 @@ int main(int argc, char* argv[]) {
 		else {
 			if(rank == 0) {
 				sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
-				printf("dobs[0] = %f\n", dobs[local_is * ng * nt]);
 				if(is == rank * k + ntask - 1) {
 					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
 						MPI_Recv(&dobs[0], ng*nt, MPI_FLOAT, other_is / k, other_is, MPI_COMM_WORLD, &status);
@@ -386,7 +386,6 @@ int main(int argc, char* argv[]) {
 		else {
 			if(rank == 0) {
 				sf_floatwrite(&dobs_t[local_is * ng * nt], ng*nt, params.shots_bg);
-				printf("dobs_t[0] = %f\n", dobs_t[local_is * ng * nt]);
 				if(is == rank * k + ntask - 1) {
 					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
 						MPI_Recv(&dobs_t[0], ng*nt, MPI_FLOAT, other_is / k, other_is + OFFSET, MPI_COMM_WORLD, &status);

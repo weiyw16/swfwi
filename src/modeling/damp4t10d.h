@@ -27,6 +27,7 @@ public:
   void stepForward(float *p0, float *p1) const;
   void stepBackward(float *p0, float *p1) const;
   void bindVelocity(const Velocity &_vel);
+  void bindRealVelocity(const Velocity &_vel);
   void addSource(float *p, const float *source, const ShotPosition &pos) const;
   void addSource(float *p, const float *source, int is) const;
   void subSource(float *p, const float *source, const ShotPosition &pos) const;
@@ -55,6 +56,7 @@ public:
 public:
   const Velocity &getVelocity() const;
   Velocity &getVelocity();
+	const std::vector<float> getVelocityDiff() const;
   const ShotPosition &getAllSrcPos() const;
   const ShotPosition &getAllGeoPos() const;
   int getns() const;
@@ -75,6 +77,7 @@ private:
 
 private:
   const Velocity *vel;
+  const Velocity *vel_real;
   const ShotPosition *allSrcPos;
   const ShotPosition *allGeoPos;
   float dt;
