@@ -67,52 +67,16 @@ void FtiFramework::epoch(int iter) {
 
 	for(int is = shot_begin ; is < shot_end ; is ++) {
 		std::vector<float> encobs_trans(nt * ng, 0.0f);
-		INFO() << format("calculate gradient, shot id: %d") % is;
+		INFO() << format("calculate image, shot id: %d") % is;
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
-
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
-
-		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
-		INFO() << wlt[0] << " " << wlt[132];
-		INFO() << "sum wlt: " << std::accumulate(wlt.begin(), wlt.begin() + nt, 0.0f);
-
-		std::vector<float> dcal(nt * ng, 0);
-		std::vector<float> dcal_trans(ng * nt, 0.0f);
-		fmMethod.FwiForwardModeling(wlt, dcal_trans, is);
-		//fmMethod.BornForwardModeling(fmMethod.getVelocityDiff(), wlt, dcal_trans, is);
-		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
-
-		INFO() << dcal[0];
-		INFO() << "sum dcal: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
-
 		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
-		fmMethod.fwiRemoveDirectArrival(&dcal[0], is);
-
-		INFO() << "sum encobs2: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
-		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
-
-		std::vector<float> vsrc(nt * ng, 0);
-		vectorMinus(encobs, dcal, vsrc);
-		local_obj1 += cal_objective(&vsrc[0], vsrc.size());
-		initobj = iter == 0 ? local_obj1 : initobj;
-		INFO() << "obj: " << local_obj1 << "\n";
-
-		transVsrc(vsrc, nt, ng);
-
-		std::copy(encobs.begin(), encobs.end(), vsrc.begin());	//-test
-
-		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
-
 		img.assign(2 * H * nx * nz, 0.0f);
-		image_born(fmMethod, wlt, vsrc, img, nt, dt, is, rank, H);
-
+		image_born(fmMethod, wlt, encobs, img, nt, dt, is, rank, H);
 		DEBUG() << ("sum grad: ") << std::accumulate(&img[H * nx * nz], &img[(H + 1) * nx * nz], 0.0f);
-
-		//fmMethod.scaleGradient(&img[0]);
+		//fmMethod.bornScaleGradient(&img[0]);
 		fmMethod.bornMaskGradient(&img[0], H);
-
 		std::transform(g2.begin(), g2.end(), img.begin(), g2.begin(), std::plus<float>());
-
 		DEBUG() << ("global grad: ") << std::accumulate(&g2[H * nx * nz], &g2[(H + 1) * nx * nz], 0.0f);
 	}
 
@@ -134,25 +98,27 @@ void FtiFramework::epoch(int iter) {
 	MPI_Barrier(MPI_COMM_WORLD);
 	exit(1);
 
-	/*
-	std::vector<float> img0(2 * H * nx * nz, 0.0f);
-	sf_file sf_img0 = sf_input("g2.rsf");
-	sf_floatread(&img0[0], 2 * H * nx * nz, sf_img0);
+	if(rank == 0 && iter == 0) {
+		std::vector<float> img0(2 * H * nx * nz, 0.0f);
+		sf_file sf_img0 = sf_input("g2.rsf");
+		sf_floatread(&img0[0], 2 * H * nx * nz, sf_img0);
 
-	sf_file sf_img1 = sf_output("g2.rsf");
-	sf_putint(sf_img1, "n1", nz);
-	sf_putint(sf_img1, "n2", nx);
-	sf_floatread(&img0[0], 2 * H * nx * nz, sf_img1);
-	*/
+		sf_file sf_img1 = sf_output("g2_backup.rsf");
+		sf_putint(sf_img1, "n1", nz);
+		sf_putint(sf_img1, "n2", nx);
+		sf_putint(sf_img1, "n3", 2 * H);
+		sf_floatwrite(&img0[0], 2 * H * nx * nz, sf_img1);
+		exit(1);
+	}
 
 	std::vector<float> gd(nx * nz, 0);
 	std::vector<float> grad(nx * nz, 0);
 	for(int is = shot_begin ; is < shot_end ; is ++) {
-		INFO() << format("Calculating gradient %d:") % is;
+		INFO() << format("************Calculating gradient %d:") % is;
 		std::vector<float> encobs_trans(nt * ng, 0.0f);
 		std::vector<float> vsrc(ng * nt, 0);
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
-		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
+		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);	//removeDirectArrival?
 		calgradient(fmMethod, wlt, encobs, img, gd, nt, dt, is, rank, H);
 	}
 	MPI_Allreduce(&gd[0], &grad[0], gd.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
@@ -254,6 +220,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
   int nz = fmMethod.getnz();
   int ns = fmMethod.getns();
   int ng = fmMethod.getng();
+	std::vector<float> gd0(nx * nz, 0.0f);
   const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
   const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
 
@@ -272,7 +239,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
     std::swap(sp1, sp0);
-		for(int ix = 0 ; ix < nx ; ix ++)
+		for(int ix = 0 ; ix < nx ; ix ++)	//lack of the last timestep?
 			for(int iz = 0 ; iz < nz ; iz ++)
 				ps[it * nx * nz + ix * nz + iz] = sp1[ix * nz + iz] - sp0[ix * nz + iz];
   }
@@ -308,12 +275,13 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 
 	float ps_t = 0, pg_t = 0, img_t = 0;
 	for(int it=0; it<nt; it++) {
-		for(int h = 0 ; h < H ; h ++) 
+		for(int h = -H ; h < H ; h ++) 
+			int ind = h + H;
 			for(int ix = 0 ; ix < nx ; ix ++) 
 				for(int iz = 0 ; iz < nz ; iz ++) { 
 				ps_t = ix + 2 * h >= 0 ? ps[it * nx * nz + (ix + 2 * h) * nz + iz] : 0;
 				ps_t = ix + 2 * h < nx ? ps_t : 0;
-				img_t = ix + h >= 0 ? img[h * nx * nz + (ix + h) * nz + iz] : 0; 
+				img_t = ix + h >= 0 ? img[ind * nx * nz + (ix + h) * nz + iz] : 0; 
 				img_t = ix + h < nx ? img_t : 0; 
 				sp1[ix * nz + iz] += ps_t * h * h * img_t;
 		}
@@ -321,19 +289,19 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 		std::swap(sp1, sp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
 			for(int iz = 0 ; iz < nz ; iz ++) 
-				gd[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+				gd0[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
 
 	gp0.assign(nx * nz, 0);
 	gp1.assign(nx * nz, 0);
 
 	for(int it = nt - 1; it >= 0 ; it--) {
-		for(int h = 0 ; h < H ; h ++)
+		for(int h = -H ; h < H ; h ++)
 			for(int ix = 0 ; ix < nx ; ix ++) 
 					for(int iz = 0 ; iz < nz ; iz ++) {
 					pg_t = ix - 2 * h >= 0 ? pg[it * nx * nz + (ix - 2 * h) * nz + iz] : 0;
 					pg_t = ix - 2 * h < nx ? pg_t : 0;
-					img_t = ix - h >= 0 ? img[h * nx * nz + (ix - h) * nz + iz] : 0;
+					img_t = ix - h >= 0 ? img[ind * nx * nz + (ix - h) * nz + iz] : 0;
 					img_t = ix - h < nx ? img_t : 0;
 					gp1[ix * nz + iz] +=  pg_t * h * h * img_t;
 			}
@@ -341,8 +309,9 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
     std::swap(gp1, gp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
 			for(int iz = 0 ; iz < nz ; iz ++) 
-				gd[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+				gd0[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
+	std::transform(gd.begin(), gd.end(), gd0.begin(), gd.begin(), std::plus<float>());
 }
 
 void FtiFramework::image_born(const Damp4t10d &fmMethod,
