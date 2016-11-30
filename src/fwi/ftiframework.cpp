@@ -65,6 +65,7 @@ void FtiFramework::epoch(int iter) {
 		sf_putint(sf_g2, "n3", 2 * H);
 	}
 
+	
 	for(int is = shot_begin ; is < shot_end ; is ++) {
 		std::vector<float> encobs_trans(nt * ng, 0.0f);
 		INFO() << format("calculate image, shot id: %d") % is;
@@ -108,8 +109,10 @@ void FtiFramework::epoch(int iter) {
 		sf_putint(sf_img1, "n2", nx);
 		sf_putint(sf_img1, "n3", 2 * H);
 		sf_floatwrite(&img0[0], 2 * H * nx * nz, sf_img1);
-		exit(1);
 	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	exit(1);
 
 	std::vector<float> gd(nx * nz, 0);
 	std::vector<float> grad(nx * nz, 0);
@@ -129,6 +132,7 @@ void FtiFramework::epoch(int iter) {
 		 sf_putint(sf_g2, "n2", nx);
 		 sf_floatwrite(&grad[0], nx * nz, sf_g2);
 	}
+	MPI_Barrier(MPI_COMM_WORLD);
 
 	exit(1);
 
@@ -275,7 +279,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 
 	float ps_t = 0, pg_t = 0, img_t = 0;
 	for(int it=0; it<nt; it++) {
-		for(int h = -H ; h < H ; h ++) 
+		for(int h = -H ; h < H ; h ++) {
 			int ind = h + H;
 			for(int ix = 0 ; ix < nx ; ix ++) 
 				for(int iz = 0 ; iz < nz ; iz ++) { 
@@ -284,6 +288,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 				img_t = ix + h >= 0 ? img[ind * nx * nz + (ix + h) * nz + iz] : 0; 
 				img_t = ix + h < nx ? img_t : 0; 
 				sp1[ix * nz + iz] += ps_t * h * h * img_t;
+			}
 		}
 		fmMethod.stepForward(&sp0[0], &sp1[0]);
 		std::swap(sp1, sp0);
@@ -296,7 +301,8 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 	gp1.assign(nx * nz, 0);
 
 	for(int it = nt - 1; it >= 0 ; it--) {
-		for(int h = -H ; h < H ; h ++)
+		for(int h = -H ; h < H ; h ++) {
+			int ind = h + H;
 			for(int ix = 0 ; ix < nx ; ix ++) 
 					for(int iz = 0 ; iz < nz ; iz ++) {
 					pg_t = ix - 2 * h >= 0 ? pg[it * nx * nz + (ix - 2 * h) * nz + iz] : 0;
@@ -305,6 +311,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 					img_t = ix - h < nx ? img_t : 0;
 					gp1[ix * nz + iz] +=  pg_t * h * h * img_t;
 			}
+		}
     fmMethod.stepForward(&gp0[0], &gp1[0]);
     std::swap(gp1, gp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
@@ -341,18 +348,67 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
     std::swap(sp1, sp0);
-    fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
+    //fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
+		const int check_step = 5;
+    if ((it > 0) && (it != (nt - 1)) && !(it % check_step)) {
+      char check_file_name1[64];
+      char check_file_name2[64];
+      sprintf(check_file_name1, "./rank_%d_check_time_%d_1.su", rank, it);
+      sprintf(check_file_name2, "./rank_%d_check_time_%d_2.su", rank, it);
+			FILE *f1 = fopen(check_file_name1, "wb");
+			FILE *f2 = fopen(check_file_name2, "wb");
+			fwrite(&sp0[0], sizeof(float), nx * nz, f1);
+			fwrite(&sp1[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+    }
   }
+	char check_file_name1[64];
+	char check_file_name2[64];
+	sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
+	sprintf(check_file_name2, "./rank_%d_check_time_last_2.su", rank);
+	FILE *f1 = fopen(check_file_name1, "wb");
+	FILE *f2 = fopen(check_file_name2, "wb");
+	fwrite(&sp0[0], sizeof(float), nx * nz, f1);
+	fwrite(&sp1[0], sizeof(float), nx * nz, f2);
+	fclose(f1);
+	fclose(f2);
 
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
   for(int it = nt - 1; it >= 0 ; it--) {
-    fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
-    std::swap(sp0, sp1); //-test
+		const int check_step = 5;
+		if(it == nt - 1)
+		{
+			char check_file_name1[64];
+			char check_file_name2[64];
+			sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
+			sprintf(check_file_name2, "./rank_%d_check_time_last_2.su", rank);
+			FILE *f1 = fopen(check_file_name1, "rb");
+			FILE *f2 = fopen(check_file_name2, "rb");
+			fread(&sp1[0], sizeof(float), nx * nz, f1);
+			fread(&sp0[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+		}
+		else if ((check_step > 0) && !(it % check_step) && (it != 0)) {
+			char check_file_name1[64];
+			char check_file_name2[64];
+			sprintf(check_file_name1, "./rank_%d_check_time_%d_1.su", rank, it);
+			sprintf(check_file_name2, "./rank_%d_check_time_%d_2.su", rank, it);
+			FILE *f1 = fopen(check_file_name1, "rb");
+			FILE *f2 = fopen(check_file_name2, "rb");
+			fread(&sp1[0], sizeof(float), nx * nz, f1);
+			fread(&sp0[0], sizeof(float), nx * nz, f2);
+			fclose(f1);
+			fclose(f2);
+		}
+    //fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
+    //std::swap(sp0, sp1); //-test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
     //fmMethod.subEncodedSource(&sp0[0], &wlt[it]);
-    //std::swap(sp0, sp1); //-test
+    std::swap(sp0, sp1); //-test
     fmMethod.subSource(&sp0[0], &wlt[it], curSrcPos);
 
     /**
