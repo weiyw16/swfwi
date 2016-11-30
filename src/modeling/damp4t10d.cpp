@@ -19,6 +19,7 @@ extern "C" {
 #include "fd4t10s-zjh.h"
 }
 
+#define FREE
 
 static void initbndr(std::vector<float> &bndr, int nb) {
   for(int ib=0;ib<nb;ib++){
@@ -96,10 +97,15 @@ static void expandBndry(Velocity &exvel, const Velocity &v0, int nb) {
   int nx = v0.nx;
   int nz = v0.nz;
   int nxpad = nx + 2 * nb;
+#ifdef FREE
   int nzpad = nz + nb;
+#else
+  int nzpad = nz + 2 * nb;
+#endif
   const std::vector<float> &a = v0.dat;
   std::vector<float> &b = exvel.dat;
 
+#ifdef FREE
   /// internal
   for (int ix = 0; ix < nx; ix++) {
     for (int iz = 0; iz < nz; iz++) {
@@ -120,6 +126,29 @@ static void expandBndry(Velocity &exvel, const Velocity &v0, int nb) {
       b[ix * nzpad + (nz + iz)] = b[ix * nzpad + (nz - 1)];  /* bottom*/
     }
   }
+#else
+  /// internal
+  for (int ix = 0; ix < nx; ix++) {
+    for (int iz = 0; iz < nz; iz++) {
+      b[(nb + ix) * nzpad + (nb + iz)] = a[ix * nz + iz];
+    }
+  }
+
+  /// boundary, free surface
+  for (int ix = 0; ix < nb; ix++) {
+    for (int iz = 0; iz < nz; iz++) {
+      b[ix * nzpad + nb + iz] = a[iz];                              /* left */
+      b[(nb + nx + ix) * nzpad + nb + iz] = a[(nx - 1) * nz + iz];  /* right */
+    }
+  }
+
+  for (int ix = 0; ix < nxpad; ix++) {
+    for (int iz = 0; iz < nb; iz++) {
+      b[ix * nzpad + iz] = b[ix * nzpad + nb];												 /* top*/
+      b[ix * nzpad + (nb + nz + iz)] = b[ix * nzpad + (nb + nz - 1)];  /* bottom*/
+    }
+  }
+#endif
 }
 
 static void transvel(std::vector<float> &vel, float dx, float dt) {
@@ -138,8 +167,24 @@ static void recoverVel(std::vector<float> &vel, float dx, float dt) {
 Velocity Damp4t10d::expandDomain_notrans(const Velocity& _vel) {
   // expand for boundary, free surface
   int nb = bx0 - EXFDBNDRYLEN;
+
+	sf_file sf_v1 = sf_output("v0_before.rsf");
+	sf_putint(sf_v1, "n1", _vel.nz);
+	sf_putint(sf_v1, "n2", _vel.nx);
+	sf_floatwrite(const_cast<float*>(&_vel.dat[0]), _vel.nz * _vel.nx, sf_v1);
+
+#ifdef FREE
   Velocity exvelForBndry(_vel.nx + 2 * nb, _vel.nz + nb);
   expandBndry(exvelForBndry, _vel, nb);
+#else
+  Velocity exvelForBndry(_vel.nx + 2 * nb, _vel.nz + 2 * nb);
+  expandBndry(exvelForBndry, _vel, nb);
+#endif 
+
+	sf_file sf_v2 = sf_output("v0_after.rsf");
+	sf_putint(sf_v2, "n1", _vel.nz + 2 * nb);
+	sf_putint(sf_v2, "n2", _vel.nx + 2 * nb);
+	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + 2 * nb) * (_vel.nx + 2 * nb), sf_v2);
 
 	/*
 	sf_file sf_v1 = sf_output("v0_bndry.rsf");
@@ -177,8 +222,29 @@ Velocity Damp4t10d::expandDomain_notrans(const Velocity& _vel) {
 Velocity Damp4t10d::expandDomain(const Velocity& _vel) {
   // expand for boundary, free surface
   int nb = bx0 - EXFDBNDRYLEN;
+
+	/*
+	sf_file sf_v1 = sf_output("v0_before.rsf");
+	sf_putint(sf_v1, "n1", _vel.nz);
+	sf_putint(sf_v1, "n2", _vel.nx);
+	sf_floatwrite(const_cast<float*>(&_vel.dat[0]), _vel.nz * _vel.nx, sf_v1);
+	*/
+
+#ifdef FREE
   Velocity exvelForBndry(_vel.nx + 2 * nb, _vel.nz + nb);
   expandBndry(exvelForBndry, _vel, nb);
+#else
+  Velocity exvelForBndry(_vel.nx + 2 * nb, _vel.nz + 2 * nb);
+  expandBndry(exvelForBndry, _vel, nb);
+#endif 
+
+	/*
+	sf_file sf_v2 = sf_output("v0_after.rsf");
+	sf_putint(sf_v2, "n1", _vel.nz + 2 * nb);
+	sf_putint(sf_v2, "n2", _vel.nx + 2 * nb);
+	sf_floatwrite(const_cast<float*>(&exvelForBndry.dat[0]), (_vel.nz + 2 * nb) * (_vel.nx + 2 * nb), sf_v2);
+	exit(1);
+	*/
 
 	/*
 	sf_file sf_v1 = sf_output("v0_bndry.rsf");
@@ -609,7 +675,11 @@ Damp4t10d::Damp4t10d(const ShotPosition& _allSrcPos, const ShotPosition& _allGeo
       vel(NULL), allSrcPos(&_allSrcPos), allGeoPos(&_allGeoPos),
       dt(_dt), dx(_dx), fm(_fm),  nt(_nt)
 {
+#ifdef FREE
   bz0 = EXFDBNDRYLEN;
+#else
+  bz0 = _nb + EXFDBNDRYLEN;
+#endif
   bx0 = bxn = bzn = _nb + EXFDBNDRYLEN;
   bndr.resize(bx0);
   initbndr(bndr, bndr.size());

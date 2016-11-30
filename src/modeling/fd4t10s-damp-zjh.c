@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include "fd4t10s-damp-zjh.h"
 
+#define FREE
+
 /**
  * please note that the velocity is transformed
  */
@@ -63,15 +65,25 @@ void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const 
       //printf("check 1\n");
       float delta;
       float dist = 0;
+#ifdef FREE
       if (ix >= bx && ix < nx - bx &&
           iz < nz - bz) {
         dist = 0;
       }
+#else
+      if (ix >= bx && ix < nx - bx &&
+          iz >= bz && iz < nz - bz) {
+        dist = 0;
+      }
+			if (iz < bz) {
+        dist = (float)(bz - iz) / bz;
+			}
+#endif
       if (ix < bx) {
         dist = (float)(bx - ix) / bx;
       }
       if (ix >= nx - bx) {
-        dist = (float)(ix - (nx - bx)  +  1) / bx;
+        dist = (float)(ix - (nx - bx) + 1) / bx;
       }
       if (iz >= nz - bz) {
         dist = (float)(iz - (nz - bz) + 1) / bz;
@@ -86,28 +98,6 @@ void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const 
                           (1.0f / curvel) * u2[curPos] + /// 2nd order
                           1.0f / 12 * (1.0f / curvel) * (1.0f / curvel) *
                           (u2[curPos - 1] + u2[curPos + 1] + u2[curPos - nz] + u2[curPos + nz] - 4 * u2[curPos]); /// 4th order
-      /*
-      prev_wave[curPos] = (2. - 2 * delta + delta * delta) * curr_wave[curPos] - (1 - 2 * delta) * prev_wave[curPos]  +
-                          (1.0f / curvel) * u2[curPos]; /// 2nd order
-      //printf("check 3, ix = %d, iz = %d\n", ix, iz);
-      float tt = 1.0f / 12 * (1.0f / curvel) * (1.0f / curvel);
-      //printf("check 4\n");
-      float ttt = u2[curPos - 1];
-      //printf("check 5\n");
-      ttt += u2[curPos + 1];
-      //printf("check 6\n");
-      ttt += u2[curPos - nz];
-      //printf("check 7, curPos + nz = %d, nx * nz = %d, u2[curPos + nz] = %f, ttt = %f\n", curPos + nz, nx * nz, u2[curPos + nz], ttt);
-      float a = u2[curPos + nz];
-      //printf("check 8\n");
-      ttt += a;
-      //printf("check 9\n");
-      ttt -= 4 * u2[curPos];
-      //printf("check 9\n");
-      prev_wave[curPos] += tt * ttt;
-      //prev_wave[curPos] += tt * (u2[curPos - 1] + u2[curPos + 1] + u2[curPos - nz] + u2[curPos + nz] - 4 * u2[curPos]); /// 4th order
-      //printf("check 10\n");
-      */
     }
   }
   //printf("fm 3\n");
