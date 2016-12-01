@@ -20,6 +20,7 @@ modeling_objs = [
   '#build/modeling/damp4t10d.o',
   '#build/modeling/fd4t10s-damp-zjh.o',
   '#build/modeling/fd4t10s-zjh.o',
+  '#build/modeling/fd4t10s-sponge.o',
 ]
 
 include_dir = [

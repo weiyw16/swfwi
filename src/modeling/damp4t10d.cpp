@@ -17,9 +17,10 @@ extern "C" {
 #include <rsf.h>
 #include "fd4t10s-damp-zjh.h"
 #include "fd4t10s-zjh.h"
+#include "fd4t10s-sponge.h"
 }
 
-#define FREE
+//#define FREE
 
 static void initbndr(std::vector<float> &bndr, int nb) {
   for(int ib=0;ib<nb;ib++){
@@ -34,6 +35,10 @@ static void applySponge(float* p, const float *bndr, int nx, int nz, int nb) {
 
     int ibz = nz-ib-1;
     for(int ix=0; ix<nx; ix++) {
+#ifdef FREE
+#else
+      p[ix * nz + ib] *= w; /* top sponge */
+#endif
       p[ix * nz + ibz] *= w; /* bottom sponge */
     }
 
@@ -134,7 +139,7 @@ static void expandBndry(Velocity &exvel, const Velocity &v0, int nb) {
     }
   }
 
-  /// boundary, free surface
+  /// boundary
   for (int ix = 0; ix < nb; ix++) {
     for (int iz = 0; iz < nz; iz++) {
       b[ix * nzpad + nb + iz] = a[iz];                              /* left */
@@ -303,7 +308,11 @@ void Damp4t10d::addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullwv_t2, 
 void Damp4t10d::stepForward(float* p0, float* p1) const {
   static std::vector<float> u2(vel->nx * vel->nz, 0);
 
-  fd4t10s_damp_zjh_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
+  //fd4t10s_damp_zjh_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
+  fd4t10s_sponge_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
+	applySponge(&p0[0], &bndr[0], vel->nx, vel->nz, bx0);
+	applySponge(&p1[0], &bndr[0], vel->nx, vel->nz, bx0);
+
 }
 
 void Damp4t10d::bindVelocity(const Velocity& _vel) {
@@ -324,7 +333,7 @@ void Damp4t10d::recordSeis(float* seis_it, const float* p,
 //  float sum = 0;
   for (int ig = 0; ig < ng; ig++) {
     int gx = geoPos.getx(ig) + bx0;
-    int gz = geoPos.getz(ig) + bz0;
+    int gz = geoPos.getz(ig) + bz0;	
     int idx = gx * nzpad + gz;
     seis_it[ig] = p[idx];
 //    DEBUG() << format("ig %d, idx %d, v %.20f") % ig % idx % seis_it[ig];
@@ -361,7 +370,7 @@ void Damp4t10d::manipSource(float* p, const float* source,
 
   for (int is = 0; is < pos.ns; is++) {
     int sx = pos.getx(is) + bx0;
-    int sz = pos.getz(is) + bz0;
+    int sz = pos.getz(is) + bz0; 
     p[sx * nzpad + sz] = op(p[sx * nzpad + sz], source[is]);
 //    DEBUG() << format("sx %d, sz %d, source[%d] %f") % sx % sz % is % source[is];
   }

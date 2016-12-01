@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include "fd4t10s-damp-zjh.h"
 
-#define FREE
+//#define FREE
 
 /**
  * please note that the velocity is transformed
@@ -19,7 +19,7 @@ void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const 
   const int d = 6;
   const int bz = nb;
   const int bx = nb;
-  const float max_delta = 0.05;
+  const float max_delta = 0.10;
   int ix, iz;
 
   /// Zhang, Jinhai's method
