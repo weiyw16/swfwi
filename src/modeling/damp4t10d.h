@@ -10,6 +10,7 @@
 
 extern "C" {
 #include <rsf.h>
+#include "fdutil.h"
 }
 #include <boost/function.hpp>
 #include "velocity.h"
@@ -72,6 +73,13 @@ private:
   void recordSeis(float *seis_it, const float *p, const ShotPosition &geoPos) const;
   void removeDirectArrival(const ShotPosition &allSrcPos, const ShotPosition &allGeoPos, float* data, int nt, float t_width) const;
 
+public:
+	void GetXBoundaryMPos(int xPos, int zPos, int *xMPos, int *zMPos, int nx, int nz) const;
+	void GetZBoundaryMPos(int xPos, int zPos, int *xMPos, int *zMPos, int nx, int nz) const;
+	void initCPML(int nx, int nz);
+	void applyCPML(float *uLa, float *u, float *uNe, const float *vel, int nx, int nz);
+	void initFdUtil(sf_file &v, int nb);
+
 private:
   const static int EXFDBNDRYLEN = 6;
 
@@ -89,8 +97,17 @@ private:
   mutable int bndrSize;
   mutable int bndrWidth;
 
+
 private:
   std::vector<float> bndr;
+
+	std::vector<float> psiX, psiXLa, phiX, phiXLa, EtaX, EtaXLa, psi2X, psi2XLa, phi2X, phi2XLa, u020BXLa;
+	std::vector<float> psiZ, psiZLa, phiZ, phiZLa, EtaZ, EtaZLa, psi2Z, psi2ZLa, phi2Z, phi2ZLa, u002BZLa;
+	std::vector<float> ux, uz, uxLa, uzLa;
+	int psixlen, psizlen;
+
+	struct fdm2 *fd;
+	struct spon *sp;
 
 };
 

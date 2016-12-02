@@ -1,6 +1,7 @@
 
 extern "C" {
 #include <rsf.h>
+#include "fdutil.h"
 }
 
 #ifdef _OPENMP
@@ -254,6 +255,8 @@ int main(int argc, char* argv[]) {
 		sf_putint(fullwv, "n2" , exvel.nx);
 		sf_putint(fullwv, "n3" , nt / dn);
 
+		fmMethod.initFdUtil(params.vinit, nb);
+		//fmMethod.initCPML(exvel.nx, exvel.nz);
     for(int it=0; it<nt; it++) {
       fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);

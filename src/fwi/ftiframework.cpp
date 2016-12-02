@@ -352,6 +352,7 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
 
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
+	//const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
@@ -426,6 +427,7 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
     fmMethod.stepForward(&gp0[0], &gp1[0]);
     std::swap(gp1, gp0);
 
+		/*
     if (dt * it > 0.4) {
       //printf("it = %d, cross 1\n", it);
       cross_correlation(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
@@ -438,7 +440,8 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
       //printf("it = %d, cross 5\n");
       break;
     }
-    //cross_correlation_born(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
+		*/
+    cross_correlation(&sp0[0], &gp0[0], &g0[0], nx, nz, 1.0, H);
  }
 }
 

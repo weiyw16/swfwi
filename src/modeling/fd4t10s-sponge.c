@@ -6,14 +6,14 @@
  */
 
 #include <stdio.h>
-#include "fd4t10s-damp-zjh.h"
+#include "fd4t10s-sponge.h"
 
 //#define FREE
 
 /**
  * please note that the velocity is transformed
  */
-void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const float *vel, float *u2, int nx, int nz, int nb) {
+void fd4t10s_sponge_2d_vtrans(float *prev_wave, const float *curr_wave, const float *vel, float *u2, int nx, int nz, int nb) {
   float a[6];
 
   const int d = 6;
@@ -58,43 +58,15 @@ void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const 
     }
   }
 
-  //printf("fm 2\n");
+#ifdef USE_OPENMP
   #pragma omp parallel for default(shared) private(ix, iz)
+#endif
   for (ix = d; ix < nx - d; ix++) { /// the range of ix is different from that in previous for loop
     for (iz = d; iz < nz - d; iz++) { /// be careful of the range of iz
-      //printf("check 1\n");
-      float delta;
-      float dist = 0;
-#ifdef FREE
-      if (ix >= bx && ix < nx - bx &&
-          iz < nz - bz) {
-        dist = 0;
-      }
-#else
-      if (ix >= bx && ix < nx - bx &&
-          iz >= bz && iz < nz - bz) {
-        dist = 0;
-      }
-			if (iz < bz) {
-        dist = (float)(bz - iz) / bz;
-			}
-#endif
-      if (ix < bx) {
-        dist = (float)(bx - ix) / bx;
-      }
-      if (ix >= nx - bx) {
-        dist = (float)(ix - (nx - bx) + 1) / bx;
-      }
-      if (iz >= nz - bz) {
-        dist = (float)(iz - (nz - bz) + 1) / bz;
-      }
-
-      delta = max_delta * dist * dist;
-
       int curPos = ix * nz + iz;
       float curvel = vel[curPos];
 
-      prev_wave[curPos] = (2. - 2 * delta + delta * delta) * curr_wave[curPos] - (1 - 2 * delta) * prev_wave[curPos]  +
+      prev_wave[curPos] = 2. * curr_wave[curPos] - 1 * prev_wave[curPos]  +
                           (1.0f / curvel) * u2[curPos] + /// 2nd order
                           1.0f / 12 * (1.0f / curvel) * (1.0f / curvel) *
                           (u2[curPos - 1] + u2[curPos + 1] + u2[curPos - nz] + u2[curPos + nz] - 4 * u2[curPos]); /// 4th order
