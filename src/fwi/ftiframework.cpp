@@ -56,6 +56,7 @@ void FtiFramework::epoch(int iter) {
 	std::vector<float> img(2 * H * nx * nz, 0);
 	std::vector<float> g2(2 * H * nx * nz, 0);
 
+	/*
 	sf_file sf_g2;
 	if(rank == 0 && iter == 0)
 	{
@@ -98,11 +99,12 @@ void FtiFramework::epoch(int iter) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	exit(1);
+	*/
 
-	if(rank == 0 && iter == 0) {
-		std::vector<float> img0(2 * H * nx * nz, 0.0f);
+	//if(rank == 0 && iter == 0) {
+		//std::vector<float> img0(2 * H * nx * nz, 0.0f);
 		sf_file sf_img0 = sf_input("g2.rsf");
-		sf_floatread(&img0[0], 2 * H * nx * nz, sf_img0);
+		sf_floatread(&img[0], 2 * H * nx * nz, sf_img0);
 
 		/*
 		sf_file sf_img1 = sf_output("g2_backup.rsf");
@@ -111,7 +113,7 @@ void FtiFramework::epoch(int iter) {
 		sf_putint(sf_img1, "n3", 2 * H);
 		sf_floatwrite(&img0[0], 2 * H * nx * nz, sf_img1);
 		*/
-	}
+	//}
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	//exit(1);
@@ -124,6 +126,7 @@ void FtiFramework::epoch(int iter) {
 		std::vector<float> vsrc(ng * nt, 0);
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);	//removeDirectArrival?
+		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
 		calgradient(fmMethod, wlt, encobs, img, gd, nt, dt, is, rank, H);
 	}
 	MPI_Allreduce(&gd[0], &grad[0], gd.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
@@ -217,7 +220,7 @@ void FtiFramework::epoch(int iter) {
 void FtiFramework::calgradient(const Damp4t10d &fmMethod,
     const std::vector<float> &wlt,
     const std::vector<float> &vsrc,
-    std::vector<float> &img,
+		std::vector<float> &img,
     std::vector<float> &gd,
     int nt, float dt,
 		int shot_id, int rank, int H)
@@ -241,6 +244,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
+	const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
@@ -254,6 +258,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
+	const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
   for(int it = nt - 1; it >= 0 ; it--) {
 		/*
     //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
@@ -282,41 +287,38 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 
 	printf("2\n");
 	float ps_t = 0, pg_t = 0, img_t = 0;
+	const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
 	for(int it=0; it<nt; it++) {
 		for(int h = -H ; h < H ; h ++) {
-			printf("h=%d, H=%d\n", h, H);
 			int ind = h + H;
-			for(int ix = 0 ; ix < nx ; ix ++) 
+			for(int ix = 0 ; ix < nx ; ix ++) {
+				//printf("h = %d, H = %d, ix = %d\n", h, H, ix);
 				for(int iz = 0 ; iz < nz ; iz ++) { 
-					ps_t = ix + 2 * h >= 0 ? ps[it * nx * nz + (ix + 2 * h) * nz + iz] : 0;
-					ps_t = ix + 2 * h < nx ? ps_t : 0;
-					img_t = ix + h >= 0 ? img[ind * nx * nz + (ix + h) * nz + iz] : 0; 
-					img_t = ix + h < nx ? img_t : 0; 
+					ps_t = ix + 2 * h >= 0 && ix + 2 * h < nx ? ps[it * nx * nz + (ix + 2 * h) * nz + iz] : 0;
+					img_t = ix + h >= 0 && ix + h < nx ? img[ind * nx * nz + (ix + h) * nz + iz] : 0; 
 					sp1[ix * nz + iz] += ps_t * h * h * img_t;
+				}
 			}
 		}
-		printf("t1=%d\n",it);
 		fmMethod.stepForward(&sp0[0], &sp1[0]);
-		printf("t2=%d\n",it);
 		std::swap(sp1, sp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
 			for(int iz = 0 ; iz < nz ; iz ++) 
 				gd0[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
 
+	printf("3\n");
 	gp0.assign(nx * nz, 0);
 	gp1.assign(nx * nz, 0);
-	printf("3\n");
 
+	const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
 	for(int it = nt - 1; it >= 0 ; it--) {
 		for(int h = -H ; h < H ; h ++) {
 			int ind = h + H;
 			for(int ix = 0 ; ix < nx ; ix ++) 
 					for(int iz = 0 ; iz < nz ; iz ++) {
-					pg_t = ix - 2 * h >= 0 ? pg[it * nx * nz + (ix - 2 * h) * nz + iz] : 0;
-					pg_t = ix - 2 * h < nx ? pg_t : 0;
-					img_t = ix - h >= 0 ? img[ind * nx * nz + (ix - h) * nz + iz] : 0;
-					img_t = ix - h < nx ? img_t : 0;
+					pg_t = ix - 2 * h >= 0 && ix - 2 * h < nx ? pg[it * nx * nz + (ix - 2 * h) * nz + iz] : 0;
+					img_t = ix - h >= 0 && ix - h < nx ? img[ind * nx * nz + (ix - h) * nz + iz] : 0;
 					gp1[ix * nz + iz] +=  pg_t * h * h * img_t;
 			}
 		}
@@ -326,6 +328,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 			for(int iz = 0 ; iz < nz ; iz ++) 
 				gd0[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
+	printf("4\n");
 	std::transform(gd.begin(), gd.end(), gd0.begin(), gd.begin(), std::plus<float>());
 }
 
@@ -352,7 +355,7 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
 
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
 
-	//const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
+	const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.stepForward(&sp0[0], &sp1[0]);
@@ -386,6 +389,7 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
+	const_cast<Damp4t10d*>(&fmMethod)->initCPML(nx, nz); //!!!
   for(int it = nt - 1; it >= 0 ; it--) {
 		const int check_step = 5;
 		if(it == nt - 1)
@@ -452,10 +456,8 @@ void FtiFramework::cross_correlation(float *src_wave, float *vsrc_wave, float *i
 		int ind = h + H;
 		for (int i = 0; i < nx ; i ++) {
 			for (int j = 0; j < nz ; j ++) {
-				t_src_wave = i + h < nx ? src_wave[(i + h) * nz + j] : 0;
-				t_src_wave = i + h >= 0 ? t_src_wave : 0;
-				t_vsrc_wave = i - h < nx ? vsrc_wave[(i - h) * nz + j] : 0;
-				t_vsrc_wave = i - h >= 0 ? t_vsrc_wave: 0;
+				t_src_wave = i + h < nx && i + h >= 0 ? src_wave[(i + h) * nz + j] : 0;
+				t_vsrc_wave = i - h < nx && i - h >= 0 ? vsrc_wave[(i - h) * nz + j] : 0;
 				image[ind * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
 			}
 		}

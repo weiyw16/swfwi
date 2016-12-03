@@ -26,10 +26,10 @@ extern "C" {
 
 static void initbndr(std::vector<float> &bndr, int nb) {
   for(int ib=0;ib<nb;ib++){
-//    float tmp=0.015*(nb-ib);
-//    bndr[ib]=std::exp(-tmp*tmp);
-    float tmp=(nb-ib-1) / (sqrt(2) * 4 * nb);
+    float tmp=0.0087*(nb-ib-1);
     bndr[ib]=std::exp(-tmp*tmp);
+    //float tmp=(nb-ib-1) / (sqrt(2) * 4 * nb);
+    //bndr[ib]=std::exp(-tmp*tmp);
   }
 }
 
@@ -37,14 +37,16 @@ static void applySponge(float* p, const float *bndr, int nx, int nz, int nb) {
   for(int ib=0; ib<nb; ib++) {
     float w = bndr[ib];
 
+		/*
     int ibz = nz-ib-1;
     for(int ix=0; ix<nx; ix++) {
 #ifdef FREE
 #else
-      p[ix * nz + ib] *= w; /* top sponge */
+      p[ix * nz + ib] *= w; // top sponge 
 #endif
-      p[ix * nz + ibz] *= w; /* bottom sponge */
+      p[ix * nz + ibz] *= w; // bottom sponge 
     }
+	*/
 
     int ibx = nx-ib-1;
     for(int iz=0; iz<nz; iz++) {
@@ -54,10 +56,16 @@ static void applySponge(float* p, const float *bndr, int nx, int nz, int nb) {
   }
 }
 
-void Damp4t10d::initFdUtil(sf_file &v, int nb) {
+void Damp4t10d::initFdUtil(sf_file &vinit, Velocity *v, int nb, float dx, float dt) {
 	const int ompchunk = 8;
-	fd = fdutil_init(false, false, sf_iaxa(v, 1), sf_iaxa(v, 2), nb + EXFDBNDRYLEN, ompchunk); 
-	sp = sponge_make(nb + EXFDBNDRYLEN);
+	fd = fdutil_init(false, false, sf_iaxa(vinit, 1), sf_iaxa(vinit, 2), bx0, ompchunk); 
+	sp = sponge_make(bx0);
+	float *v2 = (float *)malloc(sizeof(float) * v->nx * v->nz);
+	float **vv;
+	for(int i = 0 ; i < v->nx * v->nz ; i ++)
+		v2[i] = 1.0 / v->dat[i] * dx * dx / dt / dt;
+	vv = f1dto2d(v2, v->nx, v->nz);
+	abc = abcone2d_make(EXFDBNDRYLEN, dt, vv, false, fd);
 }
 
 void Damp4t10d::GetXBoundaryMPos(int xPos, int zPos, int *xMPos, int *zMPos, int nx, int nz) const 
@@ -154,13 +162,13 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 	int d = EXFDBNDRYLEN;
 	int nBMPosX, nBMPosZ;
 	float lB, dDlB, dD2lB, alphaDlB, alphaD2lB;
-	const float DlB0 = 4000; //Larger ValuedxB leads to stronger attenation
+	const float DlB0 = 1000; //Larger ValuedxB leads to stronger attenation
 	const float alphaDlB0 = 50; //Larger ValueAlphaxB leads to faster phase variation
 	int cnx = nx - bx0 - bxn;
 	int cnz = nz - bz0 - bzn;
 	float blengthx = cnx * dx;
 	float blengthz = cnz * dx;
-	float u020, u002, aB, bB;
+	float u020 = 0.0f, u002 = 0.0f, aB, bB;
 	for(int ix = d ; ix < nx - d ; ix ++) { 
 		for(int iz = d ; iz < nz - d ; iz ++) {
 			ux[ix * nz + iz] = (2. / 3. * (u[(ix + 1) * nz + iz] - u[(ix - 1) * nz + iz]) - 1. / 12. * (u[(ix + 2) * nz + iz] - u[(ix - 2) * nz + iz])) / dx;
@@ -258,7 +266,8 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 						+ dDlB * (2 * dD2lB + alphaD2lB) * phiZ[nBMPosX * psizlen + nBMPosZ] \
 						- (dDlB * dDlB) * (dD2lB + alphaD2lB) * EtaZ[nBMPosX * psizlen + nBMPosZ];
 				}
-				uNe[ix * nz + iz] = 2 * u[ix * nz + iz] - uLa[ix * nz + iz] + (1.0f / vel[ix * nz + iz]) * (u002 + u020) * dx * dx;
+				if(iz < bz0 || iz >= nz - bzn)
+					uNe[ix * nz + iz] = 2 * u[ix * nz + iz] - uLa[ix * nz + iz] + (1.0f / vel[ix * nz + iz]) * (u002 + u020) * dx * dx;
 			}
 		}
 	}
@@ -524,25 +533,19 @@ void Damp4t10d::addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullwv_t2, 
 void Damp4t10d::stepForward(float* p0, float* p1) const {
   static std::vector<float> u2(vel->nx * vel->nz, 0);
 
-	/*
   static std::vector<float> pre(vel->nx * vel->nz, 0);
 	memcpy(&pre[0], p0, sizeof(float) * vel->nx * vel->nz);
-	*/
   //fd4t10s_damp_zjh_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
   fd4t10s_sponge_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
-	int nz = vel->nz;
-	float **pp0 = (float **)malloc(sizeof(float *) * vel->nx);
-	float **pp1 = (float **)malloc(sizeof(float *) * vel->nx);
-	for(int ix = 0 ; ix < vel->nx ; ix ++) {
-		pp0[ix] = &p0[ix*nz];
-		pp1[ix] = &p0[ix*nz];
-	}
-	sponge2d_apply(pp0, sp, fd);
-	sponge2d_apply(pp1, sp, fd);
+	//float **pp0 = f1dto2d(p0, vel->nx, vel->nz);
+	//float **pp1 = f1dto2d(p1, vel->nx, vel->nz);
+	//abcone2d_apply(pp0, pp1, EXFDBNDRYLEN, abc, fd);
+	//sponge2d_apply(pp0, sp, fd);
+	//sponge2d_apply(pp1, sp, fd);
 	
-	//applySponge(&p0[0], &bndr[0], vel->nx, vel->nz, bx0);
-	//applySponge(&p1[0], &bndr[0], vel->nx, vel->nz, bx0);
-	//const_cast<Damp4t10d*>(this)->applyCPML(&pre[0], p1, p0, &vel->dat[0], vel->nx, vel->nz);
+	const_cast<Damp4t10d*>(this)->applyCPML(&pre[0], p1, p0, &vel->dat[0], vel->nx, vel->nz);
+	applySponge(&p0[0], &bndr[0], vel->nx, vel->nz, bx0);
+	applySponge(&p1[0], &bndr[0], vel->nx, vel->nz, bx0);
 
 }
 

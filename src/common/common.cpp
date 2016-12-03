@@ -13,6 +13,13 @@ extern "C" {
 #include "common.h"
 #include "logger.h"
 
+float ** f1dto2d(float *p, int nx, int nz) {
+	float **pp = (float **)malloc(sizeof(float *) * nx);
+	for (int ix = 0 ; ix < nx ; ix ++)
+		pp[ix] = &p[ix * nz];
+	return pp;
+}
+
 void matrix_transpose(float *matrix, float *trans, int n1, int n2)
 /*< matrix transpose: matrix tansposed to be trans >*/
 {

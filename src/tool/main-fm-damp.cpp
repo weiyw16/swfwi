@@ -249,23 +249,27 @@ int main(int argc, char* argv[]) {
     std::vector<float> p1(exvel.nz * exvel.nx, 0);
     std::vector<float> dobs_trans(params.nt * params.ng, 0);
     ShotPosition curSrcPos = allSrcPos.clipRange(is, is);
+		/*
 		int dn = 10;
 		sf_file fullwv = sf_output("fullwv.rsf");
 		sf_putint(fullwv, "n1" , exvel.nz);
 		sf_putint(fullwv, "n2" , exvel.nx);
 		sf_putint(fullwv, "n3" , nt / dn);
+		*/
 
-		fmMethod.initFdUtil(params.vinit, nb);
-		//fmMethod.initCPML(exvel.nx, exvel.nz);
+		//fmMethod.initFdUtil(params.vinit, &exvel, nb, params.dx, dt);
+		fmMethod.initCPML(exvel.nx, exvel.nz);
     for(int it=0; it<nt; it++) {
       fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
       fmMethod.stepForward(&p0[0], &p1[0]);
       std::swap(p1, p0);
       fmMethod.recordSeis(&dobs_trans[it*ng], &p0[0]);
+			/*
 			if(it % dn == 0)
 				sf_floatwrite(&p0[0], exvel.nx * exvel.nz, fullwv);
+				*/
     }
-		exit(1);
+		//exit(1);
     matrix_transpose(&dobs_trans[0], &dobs[local_is * ng * nt], ng, nt);
 		if(np == 1) {
 			sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);

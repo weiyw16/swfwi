@@ -78,7 +78,7 @@ public:
 	void GetZBoundaryMPos(int xPos, int zPos, int *xMPos, int *zMPos, int nx, int nz) const;
 	void initCPML(int nx, int nz);
 	void applyCPML(float *uLa, float *u, float *uNe, const float *vel, int nx, int nz);
-	void initFdUtil(sf_file &v, int nb);
+	void initFdUtil(sf_file &vinit, Velocity *v, int nb, float dx, float dt);
 
 private:
   const static int EXFDBNDRYLEN = 6;
@@ -108,6 +108,7 @@ private:
 
 	struct fdm2 *fd;
 	struct spon *sp;
+	struct abc2 *abc;
 
 };
 
