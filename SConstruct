@@ -87,14 +87,12 @@ inc_path          = []
 libpath           = ['#' + dirs['lib'], '#scalapack', '#rsf']
 scalapack_gnu_lib = ['scalapack-gnu', 'lapack-gnu', 'refblas-gnu', 'gfortran'] # don't change the order
 scalapack_sw_lib =  ['scalapack-sw', 'lapack-sw', 'refblas-sw'] # don't change the order
-rsf_gnu_lib = ['su-gnu', 'rsf-gnu'] # don't change the order
-rsf_sw_lib =  [] # don't change the order
 libs              = []
 
 if compiler_set == 'sw':
-  libs = scalapack_sw_lib + rsf_sw_lib
+  libs = scalapack_sw_lib
 else:
-  libs = scalapack_gnu_lib + rsf_gnu_lib
+  libs = scalapack_gnu_lib
 for inc in additional_includes:
   inc_path += ['-isystem', inc]
 for lib in additional_libs:

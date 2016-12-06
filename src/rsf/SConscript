@@ -12,6 +12,13 @@ getpar.c
 kiss_fft.c
 komplex.c
 simtab.c
+fdutil.c
+axa.c
+intsinc8.c
+inttable8.c
+mksinc.c
+sinc.c
+toeplitz.c
               """.split()
 
 ############################### for library ###########################

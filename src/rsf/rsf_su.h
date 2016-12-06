@@ -86,7 +86,7 @@ spanned by the xin values in performed as follows:
 #define _sf_intsinc8_h
 
 
-#include <rsf.h>
+#include "rsf.h"
 
 
 void ints8c (int nxin         /* number of x values at which y(x) is input */, 
