@@ -28,30 +28,26 @@ static void initbndr(std::vector<float> &bndr, int nb) {
   for(int ib=0;ib<nb;ib++){
     float tmp=0.0087*(nb-ib-1);
     bndr[ib]=std::exp(-tmp*tmp);
-    //float tmp=(nb-ib-1) / (sqrt(2) * 4 * nb);
-    //bndr[ib]=std::exp(-tmp*tmp);
   }
 }
 
-static void applySponge(float* p, const float *bndr, int nx, int nz, int nb) {
+static void applySponge(float* p, const float *vel, const float *bndr, int nx, int nz, int nb, float dt, float dx) {
   for(int ib=0; ib<nb; ib++) {
     float w = bndr[ib];
 
-		/*
     int ibz = nz-ib-1;
     for(int ix=0; ix<nx; ix++) {
 #ifdef FREE
 #else
-      p[ix * nz + ib] *= w; // top sponge 
+      p[ix * nz + ib] *= w;
 #endif
-      p[ix * nz + ibz] *= w; // bottom sponge 
+      p[ix * nz + ibz] *= w;
     }
-	*/
 
     int ibx = nx-ib-1;
     for(int iz=0; iz<nz; iz++) {
-      p[ib  * nz + iz] *= w; /*   left sponge */
-      p[ibx * nz + iz] *= w; /*  right sponge */
+      p[ib  * nz + iz] *= w;
+      p[ibx * nz + iz] *= w;
     }
   }
 }
@@ -162,13 +158,14 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 	int d = EXFDBNDRYLEN;
 	int nBMPosX, nBMPosZ;
 	float lB, dDlB, dD2lB, alphaDlB, alphaD2lB;
-	const float DlB0 = 1000; //Larger ValuedxB leads to stronger attenation
-	const float alphaDlB0 = 50; //Larger ValueAlphaxB leads to faster phase variation
+	float DlB0; //Larger ValuedxB leads to stronger attenation
+	float alphaDlB0; //Larger ValueAlphaxB leads to faster phase variation
 	int cnx = nx - bx0 - bxn;
 	int cnz = nz - bz0 - bzn;
 	float blengthx = cnx * dx;
 	float blengthz = cnz * dx;
 	float u020 = 0.0f, u002 = 0.0f, aB, bB;
+	#pragma omp parallel for private(nBMPosX, nBMPosZ, lB, dDlB, dD2lB, alphaDlB, alphaD2lB, DlB0, alphaDlB0, u020, u002, aB, bB)
 	for(int ix = d ; ix < nx - d ; ix ++) { 
 		for(int iz = d ; iz < nz - d ; iz ++) {
 			ux[ix * nz + iz] = (2. / 3. * (u[(ix + 1) * nz + iz] - u[(ix - 1) * nz + iz]) - 1. / 12. * (u[(ix + 2) * nz + iz] - u[(ix - 2) * nz + iz])) / dx;
@@ -182,6 +179,8 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 				//X boundaries
 				if(ix < bx0 || ix >= nx - bxn)
 				{
+					DlB0 = 16000; //Larger ValuedxB leads to stronger attenation
+					alphaDlB0 = 0; //Larger ValueAlphaxB leads to faster phase variation
 					//Generate boundary coordinates
 					GetXBoundaryMPos(ix, iz, &nBMPosX, &nBMPosZ, nx, nz);
 					//Compute the convolutions
@@ -227,6 +226,11 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 				//Z boundaries
 				if(iz < bz0 || iz >= nz - bzn)
 				{
+					if(iz < bz0)
+						DlB0 = 1000; //Larger ValuedxB leads to stronger attenation
+					else
+						DlB0 = 4000;
+					alphaDlB0 = 0; //Larger ValueAlphaxB leads to faster phase variation
 					//Generate boundary coordinates
 					GetZBoundaryMPos(ix, iz, &nBMPosX, &nBMPosZ, nx , nz);
 					//Compute the convolutions
@@ -266,8 +270,7 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 						+ dDlB * (2 * dD2lB + alphaD2lB) * phiZ[nBMPosX * psizlen + nBMPosZ] \
 						- (dDlB * dDlB) * (dD2lB + alphaD2lB) * EtaZ[nBMPosX * psizlen + nBMPosZ];
 				}
-				if(iz < bz0 || iz >= nz - bzn)
-					uNe[ix * nz + iz] = 2 * u[ix * nz + iz] - uLa[ix * nz + iz] + (1.0f / vel[ix * nz + iz]) * (u002 + u020) * dx * dx;
+				uNe[ix * nz + iz] = 2 * u[ix * nz + iz] - uLa[ix * nz + iz] + (1.0f / vel[ix * nz + iz]) * (u002 + u020) * dx * dx;
 			}
 		}
 	}
@@ -544,8 +547,10 @@ void Damp4t10d::stepForward(float* p0, float* p1) const {
 	//sponge2d_apply(pp1, sp, fd);
 	
 	const_cast<Damp4t10d*>(this)->applyCPML(&pre[0], p1, p0, &vel->dat[0], vel->nx, vel->nz);
-	applySponge(&p0[0], &bndr[0], vel->nx, vel->nz, bx0);
-	applySponge(&p1[0], &bndr[0], vel->nx, vel->nz, bx0);
+	//applySponge(&p0[0], &bndr[0], vel->nx, vel->nz, bx0);
+	//applySponge(&p1[0], &bndr[0], vel->nx, vel->nz, bx0);
+	//applySponge(&p0[0], &vel->dat[0], &bndr[0], vel->nx, vel->nz, bx0, dt, dx);
+	//applySponge(&p1[0], &vel->dat[0], &bndr[0], vel->nx, vel->nz, bx0, dt, dx);
 
 }
 
@@ -991,6 +996,11 @@ int Damp4t10d::getnx() const {
 int Damp4t10d::getnz() const {
   assert(vel != NULL);
   return vel->nz;
+}
+
+int Damp4t10d::getbx0() const {
+  assert(vel != NULL);
+  return bx0;
 }
 
 Velocity& Damp4t10d::getVelocity() {

@@ -271,6 +271,8 @@ int main(int argc, char* argv[]) {
     }
 		//exit(1);
     matrix_transpose(&dobs_trans[0], &dobs[local_is * ng * nt], ng, nt);
+
+		//fmMethod.fwiRemoveDirectArrival(&dobs[local_is * ng * nt], local_is);
 		if(np == 1) {
 			sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
 		}

@@ -12,6 +12,20 @@ extern "C" {
 #include <string.h>
 #include "common.h"
 #include "logger.h"
+#include <cmath>
+
+std::vector<float> taper(int nx, int nwx) {
+	std::vector<float> tap(nx);
+	for(int ix = 0 ; ix < nx ; ix ++) {
+		if(ix < nwx)
+			tap[ix] = cos(M_PI / (2 * nwx) * (ix - nwx));
+		else if(ix > nx - nwx - 1)
+			tap[ix] = cos(M_PI / (2 * nwx) * (ix - (nx - nwx - 1)));
+		else
+			tap[ix] = 1;
+	}
+	return tap;
+}
 
 float ** f1dto2d(float *p, int nx, int nz) {
 	float **pp = (float **)malloc(sizeof(float *) * nx);

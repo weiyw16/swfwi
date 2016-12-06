@@ -43,6 +43,8 @@ FtiFramework::FtiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSt
 }
 
 void FtiFramework::epoch(int iter) {
+	int nwx = 150;
+	std::vector<float> tap = taper(ng, nwx);
 	std::vector<float> encobs(ng * nt, 0);
 	int rank, np, k, ntask, shot_begin, shot_end;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -71,8 +73,13 @@ void FtiFramework::epoch(int iter) {
 		std::vector<float> encobs_trans(nt * ng, 0.0f);
 		INFO() << format("calculate image, shot id: %d") % is;
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		for(int it = 0 ; it < nt ; it ++)
+			for(int ig = 0 ; ig < ng ; ig ++)
+				//if((ig < is * 16 && ig < nwx)	|| (ig > is * 16 && ig > nx - nwx))
+				if((ig < 200 && ig < nwx)	|| (ig > 200 && ig > ng - nwx)) //you need to change!!!!
+					encobs_trans[it * ng + ig] *= tap[ig];
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
-		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
+		//fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
 		img.assign(2 * H * nx * nz, 0.0f);
 		image_born(fmMethod, wlt, encobs, img, nt, dt, is, rank, H);
 		DEBUG() << ("sum grad: ") << std::accumulate(&img[H * nx * nz], &img[(H + 1) * nx * nz], 0.0f);
@@ -103,7 +110,7 @@ void FtiFramework::epoch(int iter) {
 
 	//if(rank == 0 && iter == 0) {
 		//std::vector<float> img0(2 * H * nx * nz, 0.0f);
-		sf_file sf_img0 = sf_input("g2.rsf");
+		sf_file sf_img0 = sf_input("g3.rsf");
 		sf_floatread(&img[0], 2 * H * nx * nz, sf_img0);
 
 		/*
@@ -123,10 +130,13 @@ void FtiFramework::epoch(int iter) {
 	for(int is = shot_begin ; is < shot_end ; is ++) {
 		INFO() << format("************Calculating gradient %d:") % is;
 		std::vector<float> encobs_trans(nt * ng, 0.0f);
-		std::vector<float> vsrc(ng * nt, 0);
 		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		for(int it = 0 ; it < nt ; it ++)
+			for(int ig = 0 ; ig < ng ; ig ++)
+				//if((ig < is * 16 && ig < nwx)	|| (ig > is * 16 && ig > nx - nwx))
+				if((ig < 200 && ig < nwx)	|| (ig > 200 && ig > ng - nwx)) //you need to change!!!!
+					encobs_trans[it * ng + ig] *= tap[ig];
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);	//removeDirectArrival?
-		fmMethod.fwiRemoveDirectArrival(&encobs[0], is);
 		calgradient(fmMethod, wlt, encobs, img, gd, nt, dt, is, rank, H);
 	}
 	MPI_Allreduce(&gd[0], &grad[0], gd.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
@@ -229,6 +239,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
   int nz = fmMethod.getnz();
   int ns = fmMethod.getns();
   int ng = fmMethod.getng();
+	int nb = fmMethod.getbx0();
 	std::vector<float> gd0(nx * nz, 0.0f);
   const ShotPosition &allGeoPos = fmMethod.getAllGeoPos();
   const ShotPosition &allSrcPos = fmMethod.getAllSrcPos();
@@ -291,9 +302,9 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 	for(int it=0; it<nt; it++) {
 		for(int h = -H ; h < H ; h ++) {
 			int ind = h + H;
-			for(int ix = 0 ; ix < nx ; ix ++) {
+			for(int ix = 0 ; ix < nx - 0 ; ix ++) {
 				//printf("h = %d, H = %d, ix = %d\n", h, H, ix);
-				for(int iz = 0 ; iz < nz ; iz ++) { 
+				for(int iz = 0 ; iz < nz - 0 ; iz ++) { 
 					ps_t = ix + 2 * h >= 0 && ix + 2 * h < nx ? ps[it * nx * nz + (ix + 2 * h) * nz + iz] : 0;
 					img_t = ix + h >= 0 && ix + h < nx ? img[ind * nx * nz + (ix + h) * nz + iz] : 0; 
 					sp1[ix * nz + iz] += ps_t * h * h * img_t;
@@ -304,7 +315,7 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
 		std::swap(sp1, sp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
 			for(int iz = 0 ; iz < nz ; iz ++) 
-				gd0[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+				gd0[ix * nz + iz] += 2 * sp0[ix * nz + iz] * pg[(nt - 1 - it) * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
 
 	printf("3\n");
@@ -326,9 +337,16 @@ void FtiFramework::calgradient(const Damp4t10d &fmMethod,
     std::swap(gp1, gp0);
 		for(int ix = 0 ; ix < nx ; ix ++) 
 			for(int iz = 0 ; iz < nz ; iz ++) 
-				gd0[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[it * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
+				gd0[ix * nz + iz] += 2 * gp0[ix * nz + iz] * ps[(nt - 1 - it) * nx * nz + ix * nz + iz] * exvel.dat[ix * nz + iz];
 	}
 	printf("4\n");
+	char filename[20];
+	sprintf(filename, "grad_%d.rsf", shot_id);
+	sf_file sf_g2 = sf_output(filename);
+	sf_putint(sf_g2, "n1", nz);
+	sf_putint(sf_g2, "n2", nx);
+	sf_floatwrite(&gd[0], nx * nz, sf_g2);
+
 	std::transform(gd.begin(), gd.end(), gd0.begin(), gd.begin(), std::plus<float>());
 }
 
@@ -451,16 +469,27 @@ void FtiFramework::image_born(const Damp4t10d &fmMethod,
 
 void FtiFramework::cross_correlation(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H) {
 	float t_src_wave, t_vsrc_wave;
+	int nb = fmMethod.getbx0();
 #pragma omp parallel for private(t_src_wave, t_vsrc_wave)
 	for(int h = -H ; h < H ; h ++) {
 		int ind = h + H;
-		for (int i = 0; i < nx ; i ++) {
-			for (int j = 0; j < nz ; j ++) {
+		for (int i = 0 ; i < nx ; i ++) {
+			for (int j = 0 ; j < nz ; j ++) {
 				t_src_wave = i + h < nx && i + h >= 0 ? src_wave[(i + h) * nz + j] : 0;
 				t_vsrc_wave = i - h < nx && i - h >= 0 ? vsrc_wave[(i - h) * nz + j] : 0;
 				image[ind * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
 			}
 		}
+
+		/*
+		for (int i = nb ; i < nx - nb ; i ++) {
+			for (int j = nb ; j < nz - nb ; j ++) {
+				t_src_wave = i + h < nx - nb && i + h >= nb ? src_wave[(i + h) * nz + j] : 0;
+				t_vsrc_wave = i - h < nx - nb && i - h >= nb ? vsrc_wave[(i - h) * nz + j] : 0;
+				image[ind * nx * nz + i * nz + j] += t_src_wave * t_vsrc_wave * scale;
+			}
+		}
+		*/
 	}
 }
 

@@ -67,6 +67,7 @@ public:
   int getnt() const;
   int getnx() const;
   int getnz() const;
+  int getbx0() const;
 
 private:
   void manipSource(float *p, const float *source, const ShotPosition &pos, boost::function2<float, float, float> op) const;
