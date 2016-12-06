@@ -59,7 +59,9 @@ void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const 
   }
 
   //printf("fm 2\n");
+#ifdef USE_OPENMP
   #pragma omp parallel for default(shared) private(ix, iz)
+#endif
   for (ix = d; ix < nx - d; ix++) { /// the range of ix is different from that in previous for loop
     for (iz = d; iz < nz - d; iz++) { /// be careful of the range of iz
       //printf("check 1\n");

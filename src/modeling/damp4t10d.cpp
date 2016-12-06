@@ -165,7 +165,9 @@ void Damp4t10d::applyCPML(float *uLa, float *u, float *uNe, const float *vel, in
 	float blengthx = cnx * dx;
 	float blengthz = cnz * dx;
 	float u020 = 0.0f, u002 = 0.0f, aB, bB;
+#ifdef USE_OPENMP
 	#pragma omp parallel for private(nBMPosX, nBMPosZ, lB, dDlB, dD2lB, alphaDlB, alphaD2lB, DlB0, alphaDlB0, u020, u002, aB, bB)
+#endif
 	for(int ix = d ; ix < nx - d ; ix ++) { 
 		for(int iz = d ; iz < nz - d ; iz ++) {
 			ux[ix * nz + iz] = (2. / 3. * (u[(ix + 1) * nz + iz] - u[(ix - 1) * nz + iz]) - 1. / 12. * (u[(ix + 2) * nz + iz] - u[(ix - 2) * nz + iz])) / dx;
@@ -618,7 +620,9 @@ void Damp4t10d::manipSource(float* p, const float* source,
 void Damp4t10d::bornMaskGradient(float* grad, int H) const {
   int nxpad = vel->nx;
   int nzpad = vel->nz;
-#pragma omp parallel for
+#ifdef USE_OPENMP
+	#pragma omp parallel for
+#endif
 	for (int h = -H ; h < H ; h ++) {
 		int ind = h + H;
 		for (int ix = 0; ix < nxpad; ix++) {
@@ -851,7 +855,9 @@ void Damp4t10d::bornScaleGradient(float* grad, int H) const {
   int nzpad = vel->nz;
   int nz = nzpad - bz0 - bzn;
 
-#pragma omp parallel for
+#ifdef USE_OPENMP
+	#pragma omp parallel for
+#endif
 	for (int h = -H ; h < H ; h ++) {
 		int ind = h + H;
 		for (int ix = bx0; ix < nxpad - bxn; ix++) {
