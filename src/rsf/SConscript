@@ -22,13 +22,15 @@ toeplitz.c
               """.split()
 
 ############################### for library ###########################
+inc_path = []							
 if compiler_set == 'sw':
   cflags = ['-O0']
+  inc_path = ['-isystem', os.environ['HOME'] + '/softs/src']
 else:
   cflags = ['-O2']
 
 myenv    = Environment(CC = c_compiler,
-                       CFLAGS = cflags,
+                       CFLAGS = cflags + inc_path,
                        ENV = os.environ)
 
 # compile to object files

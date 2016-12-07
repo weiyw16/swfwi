@@ -9,7 +9,7 @@
 import os
 
 # compiler options
-compiler_set        = 'gnu' # intel, gnu, sw, swintel
+compiler_set        = 'sw' # intel, gnu, sw, swintel
 debug_mode          = 0
 additional_includes = [os.environ['HOME'] + '/tar/boost_1_61_0/',]
 additional_libpath  = []
