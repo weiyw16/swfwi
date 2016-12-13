@@ -37,7 +37,7 @@ extern "C"
 
 #include "aux.h"
 
-FwiFramework::FwiFramework(Damp4t10d &method, const FwiUpdateSteplenOp &updateSteplenOp,
+FwiFramework::FwiFramework(ForwardModeling &method, const FwiUpdateSteplenOp &updateSteplenOp,
     const FwiUpdateVelOp &_updateVelOp,
     const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
     FwiBase(method, _wlt, _dobs), updateStenlelOp(updateSteplenOp), updateVelOp(_updateVelOp)
@@ -294,7 +294,7 @@ void FwiFramework::epoch(int iter) {
 
 }
 
-void FwiFramework::calgradient(const Damp4t10d &fmMethod,
+void FwiFramework::calgradient(const ForwardModeling &fmMethod,
     const std::vector<float> &wlt,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,

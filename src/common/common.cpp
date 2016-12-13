@@ -13,9 +13,17 @@ extern "C" {
 #include "common.h"
 #include "logger.h"
 #include <cmath>
-
 std::vector<float> taper(int nx, int nwx) {
 	std::vector<float> tap(nx);
+	for(int ix = 0 ; ix < nx ; ix ++) {
+		if(ix < nwx)
+			tap[ix] = 0.5 * cos(M_PI / (nwx) * (ix - nwx)) + 0.5;
+		else if(ix > nx - nwx - 1)
+			tap[ix] = 0.5 * cos(M_PI / (nwx) * (ix - (nx - nwx - 1))) + 0.5;
+		else
+			tap[ix] = 1;
+	}
+	/*
 	for(int ix = 0 ; ix < nx ; ix ++) {
 		if(ix < nwx)
 			tap[ix] = cos(M_PI / (2 * nwx) * (ix - nwx));
@@ -24,6 +32,7 @@ std::vector<float> taper(int nx, int nwx) {
 		else
 			tap[ix] = 1;
 	}
+	*/
 	return tap;
 }
 

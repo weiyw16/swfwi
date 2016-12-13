@@ -49,7 +49,7 @@ void calMaxAlpha2_3(const Velocity &exvel,  const float *grad, float dt, float d
 
 } /// end of name space
 
-FwiUpdateSteplenOp::FwiUpdateSteplenOp(const Damp4t10d &fmMethod, const FwiUpdateVelOp &updateVelOp,
+FwiUpdateSteplenOp::FwiUpdateSteplenOp(const ForwardModeling &fmMethod, const FwiUpdateVelOp &updateVelOp,
     int max_iter_select_alpha3, float maxdv, int ns, int ng, int nt, std::vector<float> *encsrc) :
   fmMethod(fmMethod), updateVelOp(updateVelOp), encsrc(encsrc), encobs(NULL),
   max_iter_select_alpha3(max_iter_select_alpha3), maxdv(maxdv), ns(ns), ng(ng), nt(nt)
@@ -88,7 +88,7 @@ float FwiUpdateSteplenOp::calobjval(const std::vector<float>& grad,
   exit(1);
   */
 
-  Damp4t10d updateMethod = fmMethod;
+  ForwardModeling updateMethod = fmMethod;
   updateMethod.bindVelocity(newVel);
 
   //forward modeling

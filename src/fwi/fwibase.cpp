@@ -37,7 +37,7 @@ extern "C"
 
 #include "aux.h"
 
-FwiBase::FwiBase(Damp4t10d &method, const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
+FwiBase::FwiBase(ForwardModeling &method, const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
     fmMethod(method), wlt(_wlt), dobs(_dobs),
     ns(method.getns()), ng(method.getng()), nt(method.getnt()),
     nx(method.getnx()), nz(method.getnz()), dx(method.getdx()), dt(method.getdt()),
@@ -104,6 +104,27 @@ void FwiBase::updateGrad(float *pre_gradient, const float *cur_gradient, float *
   }
 }
 
+void FwiBase::one_order_virtual_source_forth_accuracy(float *vsrc, int num) {
+  float *tmp_vsrc = (float *)malloc(num * sizeof(float));
+  memcpy(tmp_vsrc, vsrc, num * sizeof(float));
+  int i = 0;
+  for (i = 0; i < num; i ++) {
+    if ( i <= 1) {
+      vsrc[i] = 0.0f;
+      continue;
+    }
+
+    if ( (num - 1) == i || (num - 2) == i) {
+      vsrc[i] = 0.0f;
+      continue;
+    }
+
+    //vsrc[i] = -1. / 3 * tmp_vsrc[i - 1] -1. / 3 * tmp_vsrc[i] + 2. / 3 * tmp_vsrc[i + 1];
+    vsrc[i] = (- tmp_vsrc[i - 1] + tmp_vsrc[i + 1]) / 2;
+  }
+
+  free(tmp_vsrc);
+}
 
 void FwiBase::second_order_virtual_source_forth_accuracy(float *vsrc, int num) {
   float *tmp_vsrc = (float *)malloc(num * sizeof(float));

@@ -12,7 +12,7 @@
 #include <boost/random/normal_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/variate_generator.hpp>
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "Matrix.h"
 #include "pMatrix.h"
 #include <iostream>
@@ -20,7 +20,7 @@
 
 class EnkfAnalyze {
 public:
-  EnkfAnalyze(const Damp4t10d &fm, const std::vector<float> &wlt, const std::vector<float> &dobs, float sigmafactor);
+  EnkfAnalyze(const ForwardModeling &fm, const std::vector<float> &wlt, const std::vector<float> &dobs, float sigmafactor);
 
   void analyze(std::vector<float *> &totalVelSet, std::vector<float *> &velSet) const;
   void pAnalyze(std::vector<float *> &velSet, Matrix &lambdaSet, Matrix &ratioSet) const;
@@ -47,7 +47,7 @@ protected:
   static const int ENKF_SEED = 2;
 
 protected:
-  const Damp4t10d &fm;
+  const ForwardModeling &fm;
   const std::vector<float> &wlt;
   const std::vector<float> &dobs;
   mutable RandomCodes enkfRandomCodes;

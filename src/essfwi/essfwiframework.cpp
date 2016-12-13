@@ -38,7 +38,7 @@ extern "C"
 #include "aux.h"
 #include "ReguFactor.h"
 
-EssFwiFramework::EssFwiFramework(Damp4t10d &method, const UpdateSteplenOp &updateSteplenOp,
+EssFwiFramework::EssFwiFramework(ForwardModeling &method, const UpdateSteplenOp &updateSteplenOp,
     const UpdateVelOp &_updateVelOp,
     const std::vector<float> &_wlt, const std::vector<float> &_dobs) :
     FwiBase(method, _wlt, _dobs), updateStenlelOp(updateSteplenOp), updateVelOp(_updateVelOp), essRandomCodes(ESS_SEED)
@@ -101,7 +101,7 @@ void EssFwiFramework::epoch(int iter, float lambdaX, float lambdaZ) {
   fmMethod.refillBoundary(&exvel.dat[0]);
 }
 
-void EssFwiFramework::calgradient(const Damp4t10d &fmMethod,
+void EssFwiFramework::calgradient(const ForwardModeling &fmMethod,
     const std::vector<float> &encSrc,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,

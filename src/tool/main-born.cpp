@@ -16,7 +16,7 @@ extern "C" {
 #include "sf-velocity-reader.h"
 #include "common.h"
 #include "shot-position.h"
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "sfutil.h"
 #include "timer.h"
 #include "environment.h"
@@ -58,6 +58,7 @@ public:
   int jsz;
   int jgx;
   int jgz;
+	int freeSurface;
 
 public:
   int rank;
@@ -110,43 +111,8 @@ Params::Params() {
   /* x-begining index of receivers, starting from 0 */
   if (!sf_getint("gzbeg",&gzbeg))   sf_error("no gzbeg");
   /* z-begining index of receivers, starting from 0 */
-
-  /* get parameters for forward modeling */
-  if (!sf_histint(vinit,"n1",&nz)) sf_error("no n1");
-  if (!sf_histint(vinit,"n2",&nx)) sf_error("no n2");
-  if (!sf_histfloat(vinit,"d1",&dz)) sf_error("no d1");
-  if (!sf_histfloat(vinit,"d2",&dx)) sf_error("no d2");
-
-  if (!sf_getfloat("amp",&amp)) amp=1000;
-  /* maximum amplitude of ricker */
-  if (!sf_getfloat("fm",&fm)) fm=10;
-  /* dominant freq of ricker */
-  if (!sf_getint("nb",&nb))   nb=30;
-  /* thickness of sponge ABC  */
-  if (!sf_getfloat("dt",&dt)) sf_error("no dt");
-  /* time interval */
-  if (!sf_getint("nt",&nt))   sf_error("no nt");
-  /* total modeling time steps */
-  if (!sf_getint("ns",&ns))   sf_error("no ns");
-  /* total shots */
-  if (!sf_getint("ng",&ng))   sf_error("no ng");
-  /* total receivers in each shot */
-  if (!sf_getint("jsx",&jsx))   sf_error("no jsx");
-  /* source x-axis  jump interval  */
-  if (!sf_getint("jsz",&jsz))   jsz=0;
-  /* source z-axis jump interval  */
-  if (!sf_getint("jgx",&jgx))   jgx=1;
-  /* receiver x-axis jump interval */
-  if (!sf_getint("jgz",&jgz))   jgz=0;
-  /* receiver z-axis jump interval */
-  if (!sf_getint("sxbeg",&sxbeg))   sf_error("no sxbeg");
-  /* x-begining index of sources, starting from 0 */
-  if (!sf_getint("szbeg",&szbeg))   sf_error("no szbeg");
-  /* z-begining index of sources, starting from 0 */
-  if (!sf_getint("gxbeg",&gxbeg))   sf_error("no gxbeg");
-  /* x-begining index of receivers, starting from 0 */
-  if (!sf_getint("gzbeg",&gzbeg))   sf_error("no gzbeg");
-  /* z-begining index of receivers, starting from 0 */
+	if (!sf_getint("free", &freeSurface)) sf_error("no freeSurface");
+	/* whether it is freeSurface */
 
   sf_putint(shots,"n1",nt);
   sf_putint(shots,"n2",ng);
@@ -172,6 +138,7 @@ Params::Params() {
   sf_putint(shots,"jgx",jgx);
   sf_putint(shots,"jgz",jgz);
   sf_putint(shots, "nb", nb);
+  sf_putint(shots, "free", freeSurface);
 
   sf_putint(shots_bg,"n1",nt);
   sf_putint(shots_bg,"n2",ng);
@@ -197,6 +164,7 @@ Params::Params() {
   sf_putint(shots_bg,"jgx",jgx);
   sf_putint(shots_bg,"jgz",jgz);
   sf_putint(shots_bg, "nb", nb);
+  sf_putint(shots_bg, "free", freeSurface);
 
 	//!!!!!You should put the vmin and vmax of vreal not vinit to the shots, because fti will use it as input!!!!!!
   Velocity v = SfVelocityReader::read(vreal, nx, nz);
@@ -267,7 +235,7 @@ int main(int argc, char* argv[]) {
 
   ShotPosition allSrcPos(params.szbeg, params.sxbeg, params.jsz, params.jsx, ns, nz);
   ShotPosition allGeoPos(params.gzbeg, params.gxbeg, params.jgz, params.jgx, ng, nz);
-  Damp4t10d fmMethod(allSrcPos, allGeoPos, dt, params.dx, params.fm, nb, nt);
+  ForwardModeling fmMethod(allSrcPos, allGeoPos, dt, params.dx, params.fm, nb, nt, params.freeSurface);
 
   Velocity exvel = fmMethod.expandDomain(SfVelocityReader::read(params.vinit, nx, nz));
   Velocity exvel_real = fmMethod.expandDomain(SfVelocityReader::read(params.vreal, nx, nz));

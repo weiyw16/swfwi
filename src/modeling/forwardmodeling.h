@@ -1,5 +1,5 @@
 /*
- * damp4t10d.h
+ * forwardmodeling.h
  *
  *  Created on: Feb 29, 2016
  *      Author: rice
@@ -15,10 +15,12 @@ extern "C" {
 #include <boost/function.hpp>
 #include "velocity.h"
 #include "shot-position.h"
+#include "sponge.h"
+#include "cpml.h"
 
-class Damp4t10d {
+class ForwardModeling {
 public:
-  Damp4t10d(const ShotPosition &allSrcPos, const ShotPosition &allGeoPos, float dt, float dx, float fm, int nb, int nt);
+  ForwardModeling(const ShotPosition &allSrcPos, const ShotPosition &allGeoPos, float dt, float dx, float fm, int nb, int nt, int freeSurface);
 
   Velocity expandDomain(const Velocity &vel);
   Velocity expandDomain_notrans(const Velocity &vel);
@@ -68,6 +70,10 @@ public:
   int getnx() const;
   int getnz() const;
   int getbx0() const;
+  int getbxn() const;
+  int getbz0() const;
+  int getbzn() const;
+	int getFDLEN() const;
 
 private:
   void manipSource(float *p, const float *source, const ShotPosition &pos, boost::function2<float, float, float> op) const;
@@ -75,10 +81,7 @@ private:
   void removeDirectArrival(const ShotPosition &allSrcPos, const ShotPosition &allGeoPos, float* data, int nt, float t_width) const;
 
 public:
-	void GetXBoundaryMPos(int xPos, int zPos, int *xMPos, int *zMPos, int nx, int nz) const;
-	void GetZBoundaryMPos(int xPos, int zPos, int *xMPos, int *zMPos, int nx, int nz) const;
-	void initCPML(int nx, int nz);
-	void applyCPML(float *uLa, float *u, float *uNe, const float *vel, int nx, int nz);
+	CPML* getCPML() const;
 	void initFdUtil(sf_file &vinit, Velocity *v, int nb, float dx, float dt);
 
 private:
@@ -95,22 +98,19 @@ private:
   int bx0, bxn;
   int bz0, bzn;
   int nt;
+	int freeSurface;	//free surface
   mutable int bndrSize;
   mutable int bndrWidth;
 
 
 private:
   std::vector<float> bndr;
-
-	std::vector<float> psiX, psiXLa, phiX, phiXLa, EtaX, EtaXLa, psi2X, psi2XLa, phi2X, phi2XLa, u020BXLa;
-	std::vector<float> psiZ, psiZLa, phiZ, phiZLa, EtaZ, EtaZLa, psi2Z, psi2ZLa, phi2Z, phi2ZLa, u002BZLa;
-	std::vector<float> ux, uz, uxLa, uzLa;
-	int psixlen, psizlen;
+	mutable Sponge spng;
+	mutable CPML *cpml;
 
 	struct fdm2 *fd;
 	struct spon *sp;
 	struct abc2 *abc;
-
 };
 
 #endif /* SRC_FM2D_DAMP4T10D_H_ */

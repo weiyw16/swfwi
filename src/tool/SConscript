@@ -17,10 +17,12 @@ modules = """
           """.split()
 
 modeling_objs = [
-  '#build/modeling/damp4t10d.o',
+  '#build/modeling/forwardmodeling.o',
+  '#build/modeling/sponge.o',
+  '#build/modeling/cpml.o',
   '#build/modeling/fd4t10s-damp-zjh.o',
   '#build/modeling/fd4t10s-zjh.o',
-  '#build/modeling/fd4t10s-sponge.o',
+  '#build/modeling/fd4t10s-nobndry.o',
   '#build/rsf/fdutil.o',
 ]
 

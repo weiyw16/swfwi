@@ -6,14 +6,12 @@
  */
 
 #include <stdio.h>
-#include "fd4t10s-sponge.h"
-
-//#define FREE
+#include "fd4t10s-nobndry.h"
 
 /**
  * please note that the velocity is transformed
  */
-void fd4t10s_sponge_2d_vtrans(float *prev_wave, const float *curr_wave, const float *vel, float *u2, int nx, int nz, int nb) {
+void fd4t10s_nobndry_2d_vtrans(float *prev_wave, const float *curr_wave, const float *vel, float *u2, int nx, int nz, int nb, int freeSurface) {
   float a[6];
 
   const int d = 6;
@@ -30,7 +28,6 @@ void fd4t10s_sponge_2d_vtrans(float *prev_wave, const float *curr_wave, const fl
   a[4] = -0.01626042;
   a[5] = +0.00216736;
 
-  //printf("fm 1\n");
 #ifdef USE_OPENMP
   #pragma omp parallel for default(shared) private(ix, iz)
 #endif
@@ -72,6 +69,4 @@ void fd4t10s_sponge_2d_vtrans(float *prev_wave, const float *curr_wave, const fl
                           (u2[curPos - 1] + u2[curPos + 1] + u2[curPos - nz] + u2[curPos + nz] - 4 * u2[curPos]); /// 4th order
     }
   }
-  //printf("fm 3\n");
-
 }

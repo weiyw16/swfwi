@@ -8,12 +8,10 @@
 #include <stdio.h>
 #include "fd4t10s-damp-zjh.h"
 
-//#define FREE
-
 /**
  * please note that the velocity is transformed
  */
-void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const float *vel, float *u2, int nx, int nz, int nb) {
+void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const float *vel, float *u2, int nx, int nz, int nb, int freeSurface) {
   float a[6];
 
   const int d = 6;
@@ -67,20 +65,21 @@ void fd4t10s_damp_zjh_2d_vtrans(float *prev_wave, const float *curr_wave, const 
       //printf("check 1\n");
       float delta;
       float dist = 0;
-#ifdef FREE
-      if (ix >= bx && ix < nx - bx &&
-          iz < nz - bz) {
-        dist = 0;
-      }
-#else
-      if (ix >= bx && ix < nx - bx &&
-          iz >= bz && iz < nz - bz) {
-        dist = 0;
-      }
-			if (iz < bz) {
-        dist = (float)(bz - iz) / bz;
+			if(freeSurface) {
+				if (ix >= bx && ix < nx - bx &&
+						iz < nz - bz) {
+					dist = 0;
+				}
 			}
-#endif
+			else {
+				if (ix >= bx && ix < nx - bx &&
+						iz >= bz && iz < nz - bz) {
+					dist = 0;
+				}
+				if (iz < bz) {
+					dist = (float)(bz - iz) / bz;
+				}
+			}
       if (ix < bx) {
         dist = (float)(bx - ix) / bx;
       }

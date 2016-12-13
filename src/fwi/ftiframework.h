@@ -8,7 +8,7 @@
 #ifndef SRC_FWI2D_FTIFRAMEWORK_H_
 #define SRC_FWI2D_FTIFRAMEWORK_H_
 
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "fwiupdatevelop.h"
 #include "fwiupdatesteplenop.h"
 #include "random-code.h"
@@ -16,24 +16,25 @@
 
 class FtiFramework: public FwiFramework {
 public:
-  FtiFramework(Damp4t10d &fmMethod, const FwiUpdateSteplenOp &updateSteplenOp,
+  FtiFramework(ForwardModeling &fmMethod, const FwiUpdateSteplenOp &updateSteplenOp,
                   const FwiUpdateVelOp &updateVelOp, const std::vector<float> &wlt,
-                  const std::vector<float> &dobs);
+                  const std::vector<float> &dobs, int jsx, int jsz);
   void epoch(int iter);
-	void calgradient(const Damp4t10d &fmMethod,
+	void calgradient(const ForwardModeling &fmMethod,
     const std::vector<float> &encSrc,
     const std::vector<float> &vsrc,
     std::vector<float> &I,
     std::vector<float> &gd,
     int nt, float dt,
 		int shot_id, int rank, int H);
-	void image_born(const Damp4t10d &fmMethod, const std::vector<float> &encSrc,
+	void image_born(const ForwardModeling &fmMethod, const std::vector<float> &encSrc,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,
     int nt, float dt,
 		int shot_id, int rank, int H);
 	void cross_correlation(float *src_wave, float *vsrc_wave, float *image, int nx, int nz, float scale, int H);
 
+	int jsx, jsz;
 };
 
 #endif /* SRC_ESS_FWI2D_ESSFWIFRAMEWORK_H_ */

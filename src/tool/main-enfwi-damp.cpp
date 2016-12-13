@@ -19,7 +19,7 @@ extern "C" {
 
 #include "logger.h"
 #include "shot-position.h"
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "sf-velocity-reader.h"
 #include "ricker-wavelet.h"
 #include "essfwiframework.h"
@@ -80,6 +80,7 @@ public: // parameters from input files
   int jsz;
   int jgx;
   int jgz;
+	int freeSurface;
 
 public:
   int rank;
@@ -125,6 +126,7 @@ Params::Params() {
   if (!sf_histint(shots, "jgx", &jgx)) { sf_error("no jgx"); }      /* receiver x-axis jump interval  */
   if (!sf_histint(shots, "jgz", &jgz)) { sf_error("no jgz"); }      /* receiver z-axis jump interval  */
   if (!sf_histint(shots,  "nb",&nb))        { sf_error("no nb"); }  /* thickness of sponge ABC  */
+  if (!sf_histint(shots,  "free",&freeSurface))        { sf_error("no free"); }  /* whether there is free surface */
   if (!sf_histfloat(shots, "vmin", &vmin)) { sf_error("no vmin"); } /* minimal velocity in real model*/
   if (!sf_histfloat(shots, "vmax", &vmax)) { sf_error("no vmax"); } /* maximal velocity in real model*/
   //vmin -= 50;
@@ -259,7 +261,7 @@ std::vector<float *> generateVelSet(std::vector<Velocity *> &veldb) {
   return velSet;
 }
 
-float calobj(const Damp4t10d &fmMethod, const std::vector<float> wlt,
+float calobj(const ForwardModeling &fmMethod, const std::vector<float> wlt,
     std::vector<float> &dobs, int ns, int ng, int nt) {
   // create random codes
 	int seed = 1;
@@ -436,7 +438,7 @@ int main(int argc, char *argv[]) {
 
   ShotPosition allSrcPos(params.szbeg, params.sxbeg, params.jsz, params.jsx, ns, nz);
   ShotPosition allGeoPos(params.gzbeg, params.gxbeg, params.jgz, params.jgx, ng, nz);
-  Damp4t10d fmMethod(allSrcPos, allGeoPos, dt, dx, fm, nb, nt);
+  ForwardModeling fmMethod(allSrcPos, allGeoPos, dt, dx, fm, nb, nt, params.freeSurface);
   std::vector<float> wlt = rickerWavelet(nt, fm, dt, params.amp);
 
   /// read and broadcast velocity
@@ -504,12 +506,12 @@ int main(int argc, char *argv[]) {
 //	MPI_Barrier(MPI_COMM_WORLD);
 
 
-  std::vector<Damp4t10d *> fms(ntask);
+  std::vector<ForwardModeling *> fms(ntask);
   std::vector<UpdateSteplenOp *> usl(ntask);
   std::vector<EssFwiFramework *> essfwis(ntask);
 
   for (size_t i = 0; i < essfwis.size(); i++) {
-    fms[i] = new Damp4t10d(fmMethod);
+    fms[i] = new ForwardModeling(fmMethod);
     fms[i]->bindVelocity(*veldb[i]);
 
     usl[i] = new UpdateSteplenOp(*fms[i], updatevelop, nita, maxdv);

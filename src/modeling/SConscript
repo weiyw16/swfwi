@@ -4,10 +4,12 @@ Import('*')
 lib = "modeling"
 # these modules will compiled in to library
 lib_modules = """
-			  damp4t10d.cpp
+			  forwardmodeling.cpp
+				sponge.cpp
+				cpml.cpp
 			  fd4t10s-damp-zjh.c
 			  fd4t10s-zjh.c
-			  fd4t10s-sponge.c
+			  fd4t10s-nobndry.c
               """.split()
 
 extra_include_dir = [

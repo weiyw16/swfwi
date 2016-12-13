@@ -8,7 +8,7 @@
 #ifndef SRC_FWI2D_FWIFRAMEWORK_H_
 #define SRC_FWI2D_FWIFRAMEWORK_H_
 
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "fwibase.h"
 #include "fwiupdatevelop.h"
 #include "fwiupdatesteplenop.h"
@@ -16,11 +16,11 @@
 
 class FwiFramework : public FwiBase {
 public:
-  FwiFramework(Damp4t10d &fmMethod, const FwiUpdateSteplenOp &updateSteplenOp,
+  FwiFramework(ForwardModeling &fmMethod, const FwiUpdateSteplenOp &updateSteplenOp,
                   const FwiUpdateVelOp &updateVelOp, const std::vector<float> &wlt,
                   const std::vector<float> &dobs);
 	void epoch(int iter);
-	void calgradient(const Damp4t10d &fmMethod,
+	void calgradient(const ForwardModeling &fmMethod,
     const std::vector<float> &encSrc,
     const std::vector<float> &vsrc,
     std::vector<float> &g0,

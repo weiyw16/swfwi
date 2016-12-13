@@ -49,7 +49,7 @@ void initAPerturb(Matrix &matAPerturb, const std::vector<float *> &velSet,
 } /// end of name space
 
 
-EnkfAnalyze::EnkfAnalyze(const Damp4t10d &fm, const std::vector<float> &wlt,
+EnkfAnalyze::EnkfAnalyze(const ForwardModeling &fm, const std::vector<float> &wlt,
     const std::vector<float> &dobs, float sigmafactor) :
   fm(fm), wlt(wlt), dobs(dobs), enkfRandomCodes(ENKF_SEED), sigmaFactor(sigmafactor), sigmaIter0(0), initSigma(false)
 {
@@ -253,7 +253,7 @@ Matrix EnkfAnalyze::calGainMatrix(const std::vector<float*>& velSet, std::vector
     std::vector<float> dcal(encobs.size(), 0);
 
     ///// this decrease the performance ///
-    Damp4t10d newfm = fm;
+    ForwardModeling newfm = fm;
     Velocity curvel(std::vector<float>(velSet[i], velSet[i] + modelSize), fm.getnx(), fm.getnz());
     newfm.bindVelocity(curvel);
 
@@ -412,7 +412,7 @@ Matrix EnkfAnalyze::pCalGainMatrix(const std::vector<float*>& velSet, std::vecto
     std::vector<float> dcal(encobs.size(), 0);
 
     ///// this decrease the performance ///
-    Damp4t10d newfm = fm;
+    ForwardModeling newfm = fm;
     Velocity curvel(std::vector<float>(velSet[i], velSet[i] + modelSize), fm.getnx(), fm.getnz());
     newfm.bindVelocity(curvel);
 
@@ -564,7 +564,7 @@ void EnkfAnalyze::initLambdaSet(const std::vector<float*>& velSet, Matrix& lambd
     std::vector<float> dcal(encobs.size(), 0);
 
     ///// this decrease the performance ///
-    Damp4t10d newfm = fm;
+    ForwardModeling newfm = fm;
     Velocity curvel(std::vector<float>(velSet[i], velSet[i] + modelSize), fm.getnx(), fm.getnz());
     newfm.bindVelocity(curvel);
     newfm.EssForwardModeling(encsrc, dcal);

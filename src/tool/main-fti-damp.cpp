@@ -18,7 +18,7 @@ extern "C" {
 #include "logger.h"
 #include "common.h"
 #include "shot-position.h"
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "sf-velocity-reader.h"
 #include "ricker-wavelet.h"
 #include "ftiframework.h"
@@ -67,6 +67,7 @@ public: // parameters from input files
   int jsz;
   int jgx;
   int jgz;
+	int freeSurface;
 
 public:
   int rank;
@@ -108,6 +109,7 @@ Params::Params() {
   if (!sf_histint(shots, "jgx", &jgx)) { sf_error("no jgx"); }      /* receiver x-axis jump interval  */
   if (!sf_histint(shots, "jgz", &jgz)) { sf_error("no jgz"); }      /* receiver z-axis jump interval  */
   if (!sf_histint(shots,  "nb",&nb))        { sf_error("no nb"); }  /* thickness of sponge ABC  */
+  if (!sf_histint(shots,  "free",&freeSurface))        { sf_error("no free"); }  /* whether there is free surface*/
   if (!sf_histfloat(shots, "vmin", &vmin)) { sf_error("no vmin"); } /* minimal velocity in real model*/
   if (!sf_histfloat(shots, "vmax", &vmax)) { sf_error("no vmax"); } /* maximal velocity in real model*/
 
@@ -191,7 +193,7 @@ int main(int argc, char *argv[]) {
 
   ShotPosition allSrcPos(params.szbeg, params.sxbeg, params.jsz, params.jsx, ns, nz);
   ShotPosition allGeoPos(params.gzbeg, params.gxbeg, params.jgz, params.jgx, ng, nz);
-  Damp4t10d fmMethod(allSrcPos, allGeoPos, dt, dx, fm, nb, nt);
+  ForwardModeling fmMethod(allSrcPos, allGeoPos, dt, dx, fm, nb, nt, params.freeSurface);
 
   SfVelocityReader velReader(params.vinit);
   Velocity v0 = SfVelocityReader::read(params.vinit, nx, nz);
@@ -211,7 +213,7 @@ int main(int argc, char *argv[]) {
   FwiUpdateVelOp updatevelop(vmin, vmax, dx, dt);
   FwiUpdateSteplenOp updateSteplenOp(fmMethod, updatevelop, nita, maxdv, ns, ng, nt, &wlt);
 
-  FtiFramework fti(fmMethod, updateSteplenOp, updatevelop, wlt, dobs);
+  FtiFramework fti(fmMethod, updateSteplenOp, updatevelop, wlt, dobs, params.jsx, params.jsz);
 
   std::vector<float> absobj;
   std::vector<float> norobj;

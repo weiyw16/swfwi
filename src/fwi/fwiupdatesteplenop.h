@@ -9,12 +9,12 @@
 #define SRC_FWI2D_UPDATESTEPLENOP_H_
 
 #include <vector>
-#include "damp4t10d.h"
+#include "forwardmodeling.h"
 #include "fwiupdatevelop.h"
 
 class FwiUpdateSteplenOp {
 public:
-  FwiUpdateSteplenOp(const Damp4t10d &fmMethod, const FwiUpdateVelOp &updateVelOp, int max_iter_select_alpha3, float maxdv, int ns, int ng, int nt, std::vector<float> *encsrc);
+  FwiUpdateSteplenOp(const ForwardModeling &fmMethod, const FwiUpdateVelOp &updateVelOp, int max_iter_select_alpha3, float maxdv, int ns, int ng, int nt, std::vector<float> *encsrc);
 
   void bindEncSrcObs(const std::vector<float> &encsrc, const std::vector<float> &encobs);
   void calsteplen(const std::vector<float> &dobs, const std::vector<float> &grad, float obj_val1, int iter, float &steplen, float &objval, int rank, int shot_begin, int shot_end);
@@ -40,7 +40,7 @@ private:
   } preservedAlpha;
 
 private:
-  const Damp4t10d &fmMethod;
+  const ForwardModeling &fmMethod;
   const FwiUpdateVelOp &updateVelOp;
   const std::vector<float> *encsrc;
   std::vector<float> *encobs;

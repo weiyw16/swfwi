@@ -12,8 +12,10 @@
 
 class Velocity {
 public:
+  Velocity();
   Velocity(int _nx, int _nz);
   Velocity (const std::vector<float> &dat, int nx, int nz);
+	void resize(int nx, int nz);
 public:
   std::vector<float> dat;
   int nx;
