@@ -21,8 +21,8 @@ extern "C" {
 #include "fd4t10s-nobndry.h"
 }
 
-CPML* ForwardModeling::getCPML() const{
-	return cpml;
+CPML* ForwardModeling::getCPML(int cpmlId) const{
+	return cpml[cpmlId];
 }
 
 void ForwardModeling::initFdUtil(sf_file &vinit, Velocity *v, int nb, float dx, float dt) {
@@ -239,25 +239,34 @@ void ForwardModeling::addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullw
 	}
 }
 
-void ForwardModeling::stepForward(float* p0, float* p1) const {
+void ForwardModeling::stepForward(std::vector<float> &p0, std::vector<float> &p1) const {
   static std::vector<float> u2(vel->nx * vel->nz, 0);
 
-  static std::vector<float> pre(vel->nx * vel->nz, 0);
-	memcpy(&pre[0], p0, sizeof(float) * vel->nx * vel->nz);
+	//damp
   //fd4t10s_damp_zjh_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
-  fd4t10s_nobndry_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0, freeSurface);
+	
+	//sponge
+  fd4t10s_nobndry_2d_vtrans(&p0[0], &p1[0], &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0, freeSurface);
+	spng->applySponge(&p0[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
+	spng->applySponge(&p1[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
+
+	//fdUtil
 	//float **pp0 = f1dto2d(p0, vel->nx, vel->nz);
 	//float **pp1 = f1dto2d(p1, vel->nx, vel->nz);
 	//abcone2d_apply(pp0, pp1, EXFDBNDRYLEN, abc, fd);
 	//sponge2d_apply(pp0, sp, fd);
 	//sponge2d_apply(pp1, sp, fd);
 	
-	cpml->applyCPML(&pre[0], p1, p0, &vel->dat[0], vel->nx, vel->nz, *this);
-	/*
-	spng.applySponge(&p0[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
-	spng.applySponge(&p1[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
-	*/
 
+}
+
+void ForwardModeling::stepForward(std::vector<float> &p0, std::vector<float> &p1, int cpmlId) const {
+  static std::vector<float> u2(vel->nx * vel->nz, 0);
+  static std::vector<float> p2(vel->nx * vel->nz, 0);
+
+  fd4t10s_nobndry_2d_vtrans_3vars(&p0[0], &p1[0], &p2[0], &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0, freeSurface);
+	cpml[cpmlId]->applyCPML(&p0[0], &p1[0], &p2[0], &vel->dat[0], vel->nx, vel->nz, *this);
+	std::swap(p0, p2);
 }
 
 void ForwardModeling::bindVelocity(const Velocity& _vel) {
@@ -443,7 +452,7 @@ void ForwardModeling::FwiForwardModeling(const std::vector<float>& encSrc,
     exit(1);
     */
 
-    stepForward(&p0[0], &p1[0]);
+    stepForward(p0,p1);
 
     /*
     sf_file sf_p0 = sf_output("pp0.rsf");
@@ -520,7 +529,7 @@ void ForwardModeling::BornForwardModeling(const std::vector<float> &exvel_m, con
 	int it = 0;
 	for(int it0 = 0 ; it0 < nt + 1 ; it0 ++) {
 		addSource(&p1[0], &encSrc[it0], curSrcPos);
-		stepForward(&p0[0], &p1[0]);
+		stepForward(p0,p1);
 		std::swap(p1, p0);
 		swap3(fullwv_t0, fullwv_t1, fullwv_t2);
 		std::copy(p0.begin(), p0.end(), fullwv_t2);
@@ -530,7 +539,7 @@ void ForwardModeling::BornForwardModeling(const std::vector<float> &exvel_m, con
 			continue;
 		addBornwv(fullwv_t0, fullwv_t1, fullwv_t2, &exvel_m[0], dt, it, &rp1[0]);
 		//fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
-		stepForward(&rp0[0], &rp1[0]);
+		stepForward(rp0,rp1);
 		std::swap(rp1, rp0);
 		recordSeis(&dcal[it*ng], &rp0[0]);
 	}
@@ -548,7 +557,7 @@ void ForwardModeling::EssForwardModeling(const std::vector<float>& encSrc,
 
   for(int it=0; it<nt; it++) {
     addEncodedSource(&p1[0], &encSrc[it * ns]);
-    stepForward(&p0[0], &p1[0]);
+    stepForward(p0,p1);
     std::swap(p1, p0);
     recordSeis(&dcal[it*ng], &p0[0]);
   }
@@ -639,8 +648,13 @@ ForwardModeling::ForwardModeling(const ShotPosition& _allSrcPos, const ShotPosit
 		bz0 = _nb + EXFDBNDRYLEN;
   bx0 = bxn = bzn = _nb + EXFDBNDRYLEN;
   bndr.resize(bx0);
-  spng.initbndr(bndr.size());
-	cpml = new CPML();
+	spng = new Sponge();
+  spng->initbndr(bndr.size());
+
+	const int MAXCPML = 2;
+	cpml = new CPML*[MAXCPML];
+	for(int i = 0 ; i < MAXCPML ; i ++)
+		cpml[i] = new CPML();
 }
 
 void ForwardModeling::addEncodedSource(float* p, const float* encsrc) const {

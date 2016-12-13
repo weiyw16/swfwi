@@ -320,7 +320,7 @@ void FwiFramework::calgradient(const ForwardModeling &fmMethod,
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     //printf("it = %d, forward 1\n", it);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    fmMethod.stepForward(sp0,sp1);
     //printf("it = %d, forward 2\n", it);
     std::swap(sp1, sp0);
     //fmMethod.writeBndry(&bndr[0], &sp0[0], it); -test
@@ -392,7 +392,7 @@ void FwiFramework::calgradient(const ForwardModeling &fmMethod,
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
     //printf("it = %d, receiver 1\n", it);
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    fmMethod.stepForward(gp0,gp1);
     //printf("it = %d, receiver 2\n", it);
     std::swap(gp1, gp0);
 

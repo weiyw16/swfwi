@@ -27,7 +27,8 @@ public:
 
 
 	void addBornwv(float *fullwv_t0, float *fullwv_t1, float *fullwv_t2, const float *exvel_m, float dt, int it, float *rp1) const;
-  void stepForward(float *p0, float *p1) const;
+  void stepForward(std::vector<float> &p0, std::vector<float> &p1) const;
+  void stepForward(std::vector<float> &p0, std::vector<float> &p1, int cpmlId) const;
   void stepBackward(float *p0, float *p1) const;
   void bindVelocity(const Velocity &_vel);
   void bindRealVelocity(const Velocity &_vel);
@@ -81,7 +82,7 @@ private:
   void removeDirectArrival(const ShotPosition &allSrcPos, const ShotPosition &allGeoPos, float* data, int nt, float t_width) const;
 
 public:
-	CPML* getCPML() const;
+	CPML* getCPML(int cpmlId) const;
 	void initFdUtil(sf_file &vinit, Velocity *v, int nb, float dx, float dt);
 
 private:
@@ -105,8 +106,8 @@ private:
 
 private:
   std::vector<float> bndr;
-	mutable Sponge spng;
-	mutable CPML *cpml;
+	mutable Sponge *spng;
+	mutable CPML **cpml;
 
 	struct fdm2 *fd;
 	struct spon *sp;

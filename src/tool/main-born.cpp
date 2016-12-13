@@ -262,7 +262,7 @@ int main(int argc, char* argv[]) {
 	
 	for(int it=0; it<nt; it++) {
 		fmMethod.addSource(&p1[0], &rand1[it * ns], allSrcPos);
-		fmMethod.stepForward(&p0[0], &p1[0]);
+		fmMethod.stepForward(p0,p1);
 		std::swap(p1, p0);
 		fmMethod.recordSeis(&dobs_trans[it*ng], &p0[0]);
 	}
@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
 	dobs_trans.assign(params.nt * params.ng, 0);
 	for(int it=0; it<nt; it++) {
 		fmMethod.addSource(&p1[0], &rand2[it * ng], allGeoPos);
-		fmMethod.stepForward(&p0[0], &p1[0]);
+		fmMethod.stepForward(p0,p1);
 		std::swap(p1, p0);
 		fmMethod.recordSeis(&dobs_trans[it*ng], &p0[0]);
 	}
@@ -311,7 +311,7 @@ int main(int argc, char* argv[]) {
 
     for(int it0 = 0 ; it0 < nt + 1 ; it0 ++) {
       fmMethod.addSource(&p1[0], &wlt[it0], curSrcPos);
-      fmMethod.stepForward(&p0[0], &p1[0]);
+      fmMethod.stepForward(p0,p1);
       std::swap(p1, p0);
 			if(it0 < nt)
 				fmMethod.recordSeis(&dobs_trans_t[it0*ng], &p0[0]);
@@ -323,7 +323,7 @@ int main(int argc, char* argv[]) {
 			if(it < 0)
 				continue;
 			fmMethod.addBornwv(fullwv_t0, fullwv_t1, fullwv_t2, &exvel_m[0], dt, it, &rp1[0]);
-      fmMethod.stepForward(&rp0[0], &rp1[0]);
+      fmMethod.stepForward(rp0,rp1);
       std::swap(rp1, rp0);
       fmMethod.recordSeis(&dobs_trans[it*ng], &rp0[0]);
     }

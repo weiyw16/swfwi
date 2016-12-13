@@ -225,10 +225,10 @@ int main(int argc, char* argv[]) {
 		*/
 
 		//fmMethod.initFdUtil(params.vinit, &exvel, nb, params.dx, dt);
-		fmMethod.getCPML()->initCPML(exvel.nx, exvel.nz, fmMethod);
     for(int it=0; it<nt; it++) {
       fmMethod.addSource(&p1[0], &wlt[it], curSrcPos);
-      fmMethod.stepForward(&p0[0], &p1[0]);
+      //fmMethod.stepForward(&p0[0], &p1[0]);
+      fmMethod.stepForward(p0, p1, 0);
       std::swap(p1, p0);
       fmMethod.recordSeis(&dobs_trans[it*ng], &p0[0]);
 			/*

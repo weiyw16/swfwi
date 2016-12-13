@@ -262,11 +262,10 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 	sf_putint(fullwv3, "n2" , nx);
 	sf_putint(fullwv3, "n3" , nt / dn);
 
-	fmMethod.getCPML()->initCPML(nx, nz, fmMethod); //!!!
   for(int it=0; it<nt; it++) {
     //fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.addSource(&sp1[0], &src[it], curSrcPos);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    fmMethod.stepForward(sp0,sp1);
     std::swap(sp1, sp0);
 		/*
 		if(it % dn == 0)
@@ -285,7 +284,6 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 		one_order_virtual_source_forth_accuracy(const_cast<float*>(&vsrc[ig * nt]), nt);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
-	fmMethod.getCPML()->initCPML(nx, nz, fmMethod); //!!!
   for(int it = nt - 1; it >= 0 ; it--) {
 		/*
     //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
@@ -300,7 +298,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
      * forward propagate receviers
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    fmMethod.stepForward(gp0,gp1);
     std::swap(gp1, gp0);
 		/*
 		if(it % dn == 0)
@@ -353,7 +351,6 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
   std::vector<float> dobs(nt * ng, 0);
   std::vector<float> record(nx * nz, 0);
 	float ps_t = 0, pg_t = 0, img_t = 0;
-	fmMethod.getCPML()->initCPML(nx, nz, fmMethod); //!!!
 	for(int it=0; it<nt; it++) {
 				for(int h = -H ; h <= H ; h ++) {
 					int ind = h + H;
@@ -371,7 +368,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 				}
 			}
 		}
-		fmMethod.stepForward(&sp0[0], &sp1[0]);
+		fmMethod.stepForward(sp0,sp1);
 		std::swap(sp1, sp0);
 		if(it % dn == 0)
 			sf_floatwrite(&sp0[0], nx * nz, fullwv3);
@@ -403,7 +400,6 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 	gp0.assign(nx * nz, 0);
 	gp1.assign(nx * nz, 0);
 
-	fmMethod.getCPML()->initCPML(nx, nz, fmMethod); //!!!
 	for(int it = nt - 1; it >= 0 ; it--) {
 				for(int h = -H ; h <= H ; h ++) {
 					int ind = h + H;
@@ -419,7 +415,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 					//gp1[ix * nz + iz] +=  pg_t * img_t;
 			}
 		}
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    fmMethod.stepForward(gp0,gp1);
     std::swap(gp1, gp0);
 #pragma omp parallel for 
 		for(int ix = 0 ; ix < nx ; ix ++) 
@@ -462,10 +458,9 @@ void FtiFramework::image_born(const ForwardModeling &fmMethod,
 
 	std::vector<float> ps(nt * nx * nz, 0);
 
-	fmMethod.getCPML()->initCPML(nx, nz, fmMethod); //!!!
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    fmMethod.stepForward(sp0,sp1);
     std::swap(sp1, sp0);
 #pragma omp parallel for
 		for(int ix = 0 ; ix < nx ; ix ++)	//lack of the last timestep?
@@ -504,7 +499,6 @@ void FtiFramework::image_born(const ForwardModeling &fmMethod,
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
-	fmMethod.getCPML()->initCPML(nx, nz, fmMethod); //!!!
   for(int it = nt - 1; it >= 0 ; it--) {
 		/*
 		const int check_step = 5;
@@ -545,7 +539,7 @@ void FtiFramework::image_born(const ForwardModeling &fmMethod,
      * forward propagate receviers
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    fmMethod.stepForward(gp0,gp1);
     std::swap(gp1, gp0);
 
     cross_correlation(&ps[it * nx * nz], &gp0[0], &g0[0], nx, nz, 1.0, H);

@@ -108,6 +108,8 @@ void CPML::initCPML(const int nx, const int nz, const ForwardModeling &fm) {
 
 void CPML::applyCPML(float *uLa, float *u, float *uNe, const float *vel, const int nx, const int nz, const ForwardModeling &fm) {
 	if(count == 0) {
+		initCPML(nx, nz, fm);
+		INFO() << "Warning: the same CPML variables can not be used in two different forward modeling at the same time!!!";
 		if(!init) {
 			INFO() << "CPML no initialization!!";
 			exit(1);

@@ -123,7 +123,7 @@ void EssFwiFramework::calgradient(const ForwardModeling &fmMethod,
 
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &encSrc[it * ns], allSrcPos);
-    fmMethod.stepForward(&sp0[0], &sp1[0]);
+    fmMethod.stepForward(sp0,sp1);
     std::swap(sp1, sp0);
     fmMethod.writeBndry(&bndr[0], &sp0[0], it);
   }
@@ -141,7 +141,7 @@ void EssFwiFramework::calgradient(const ForwardModeling &fmMethod,
      * forward propagate receviers
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(&gp0[0], &gp1[0]);
+    fmMethod.stepForward(gp0,gp1);
     std::swap(gp1, gp0);
 
     if (dt * it > 0.4) {
