@@ -265,7 +265,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
   for(int it=0; it<nt; it++) {
     //fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     fmMethod.addSource(&sp1[0], &src[it], curSrcPos);
-    fmMethod.stepForward(sp0,sp1);
+    fmMethod.stepForward(sp0,sp1,0);
     std::swap(sp1, sp0);
 		/*
 		if(it % dn == 0)
@@ -298,7 +298,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
      * forward propagate receviers
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(gp0,gp1);
+    fmMethod.stepForward(gp0,gp1,0);
     std::swap(gp1, gp0);
 		/*
 		if(it % dn == 0)
@@ -368,7 +368,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 				}
 			}
 		}
-		fmMethod.stepForward(sp0,sp1);
+		fmMethod.stepForward(sp0,sp1,0);
 		std::swap(sp1, sp0);
 		if(it % dn == 0)
 			sf_floatwrite(&sp0[0], nx * nz, fullwv3);
@@ -415,7 +415,7 @@ void FtiFramework::calgradient(const ForwardModeling &fmMethod,
 					//gp1[ix * nz + iz] +=  pg_t * img_t;
 			}
 		}
-    fmMethod.stepForward(gp0,gp1);
+    fmMethod.stepForward(gp0,gp1,0);
     std::swap(gp1, gp0);
 #pragma omp parallel for 
 		for(int ix = 0 ; ix < nx ; ix ++) 
@@ -460,7 +460,8 @@ void FtiFramework::image_born(const ForwardModeling &fmMethod,
 
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
-    fmMethod.stepForward(sp0,sp1);
+    //fmMethod.stepForward(sp0,sp1);
+    fmMethod.stepForward(sp0,sp1,0);
     std::swap(sp1, sp0);
 #pragma omp parallel for
 		for(int ix = 0 ; ix < nx ; ix ++)	//lack of the last timestep?
@@ -539,7 +540,7 @@ void FtiFramework::image_born(const ForwardModeling &fmMethod,
      * forward propagate receviers
      */
     fmMethod.addSource(&gp1[0], &vsrc_trans[it * ng], allGeoPos);
-    fmMethod.stepForward(gp0,gp1);
+    fmMethod.stepForward(gp0,gp1,0);
     std::swap(gp1, gp0);
 
     cross_correlation(&ps[it * nx * nz], &gp0[0], &g0[0], nx, nz, 1.0, H);

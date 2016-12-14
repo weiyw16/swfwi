@@ -37,7 +37,7 @@ private:
 public:
   sf_file vinit;
   sf_file vreal;
-  sf_file shots;
+  sf_file shots_rf;
   sf_file shots_bg;
   int nb;
   int nz;
@@ -72,7 +72,7 @@ Params::Params() {
   /*< set up I/O files >*/
   vinit=sf_input ("vinit");   /* initial velocity model, unit=m/s */
   vreal=sf_input ("vreal");   /* initial velocity model, unit=m/s */
-  shots=sf_output("shots");
+  shots_rf=sf_output("shots_rf");
   shots_bg=sf_output("shots_bg");
 
   /* get parameters for forward modeling */
@@ -114,31 +114,31 @@ Params::Params() {
 	if (!sf_getint("free", &freeSurface)) sf_error("no freeSurface");
 	/* whether it is freeSurface */
 
-  sf_putint(shots,"n1",nt);
-  sf_putint(shots,"n2",ng);
-  sf_putint(shots,"n3",ns);
-  sf_putfloat(shots,"d1",dt);
-  sf_putfloat(shots,"d2",jgx*dx);
-  sf_putfloat(shots,"o1",0);
-  sf_putfloat(shots,"o2",0);
-  sf_putstring(shots,"label1","Time");
-  sf_putstring(shots,"label2","Lateral");
-  sf_putstring(shots,"label3","Shot");
-  sf_putstring(shots,"unit1","sec");
-  sf_putstring(shots,"unit2","m");
-  sf_putfloat(shots,"amp",amp);
-  sf_putfloat(shots,"fm",fm);
-  sf_putint(shots,"ng",ng);
-  sf_putint(shots,"szbeg",szbeg);
-  sf_putint(shots,"sxbeg",sxbeg);
-  sf_putint(shots,"gzbeg",gzbeg);
-  sf_putint(shots,"gxbeg",gxbeg);
-  sf_putint(shots,"jsx",jsx);
-  sf_putint(shots,"jsz",jsz);
-  sf_putint(shots,"jgx",jgx);
-  sf_putint(shots,"jgz",jgz);
-  sf_putint(shots, "nb", nb);
-  sf_putint(shots, "free", freeSurface);
+  sf_putint(shots_rf,"n1",nt);
+  sf_putint(shots_rf,"n2",ng);
+  sf_putint(shots_rf,"n3",ns);
+  sf_putfloat(shots_rf,"d1",dt);
+  sf_putfloat(shots_rf,"d2",jgx*dx);
+  sf_putfloat(shots_rf,"o1",0);
+  sf_putfloat(shots_rf,"o2",0);
+  sf_putstring(shots_rf,"label1","Time");
+  sf_putstring(shots_rf,"label2","Lateral");
+  sf_putstring(shots_rf,"label3","Shot");
+  sf_putstring(shots_rf,"unit1","sec");
+  sf_putstring(shots_rf,"unit2","m");
+  sf_putfloat(shots_rf,"amp",amp);
+  sf_putfloat(shots_rf,"fm",fm);
+  sf_putint(shots_rf,"ng",ng);
+  sf_putint(shots_rf,"szbeg",szbeg);
+  sf_putint(shots_rf,"sxbeg",sxbeg);
+  sf_putint(shots_rf,"gzbeg",gzbeg);
+  sf_putint(shots_rf,"gxbeg",gxbeg);
+  sf_putint(shots_rf,"jsx",jsx);
+  sf_putint(shots_rf,"jsz",jsz);
+  sf_putint(shots_rf,"jgx",jgx);
+  sf_putint(shots_rf,"jgz",jgz);
+  sf_putint(shots_rf, "nb", nb);
+  sf_putint(shots_rf, "free", freeSurface);
 
   sf_putint(shots_bg,"n1",nt);
   sf_putint(shots_bg,"n2",ng);
@@ -170,8 +170,8 @@ Params::Params() {
   Velocity v = SfVelocityReader::read(vreal, nx, nz);
   float vmin = *std::min_element(v.dat.begin(), v.dat.end());
   float vmax = *std::max_element(v.dat.begin(), v.dat.end());
-  sf_putfloat(shots, "vmin", vmin);
-  sf_putfloat(shots, "vmax", vmax);
+  sf_putfloat(shots_rf, "vmin", vmin);
+  sf_putfloat(shots_rf, "vmax", vmax);
 
   sf_putfloat(shots_bg, "vmin", vmin);
   sf_putfloat(shots_bg, "vmax", vmax);
@@ -311,7 +311,7 @@ int main(int argc, char* argv[]) {
 
     for(int it0 = 0 ; it0 < nt + 1 ; it0 ++) {
       fmMethod.addSource(&p1[0], &wlt[it0], curSrcPos);
-      fmMethod.stepForward(p0,p1);
+      fmMethod.stepForward(p0,p1,0);
       std::swap(p1, p0);
 			if(it0 < nt)
 				fmMethod.recordSeis(&dobs_trans_t[it0*ng], &p0[0]);
@@ -323,22 +323,22 @@ int main(int argc, char* argv[]) {
 			if(it < 0)
 				continue;
 			fmMethod.addBornwv(fullwv_t0, fullwv_t1, fullwv_t2, &exvel_m[0], dt, it, &rp1[0]);
-      fmMethod.stepForward(rp0,rp1);
+      fmMethod.stepForward(rp0,rp1,1);
       std::swap(rp1, rp0);
       fmMethod.recordSeis(&dobs_trans[it*ng], &rp0[0]);
     }
 
     matrix_transpose(&dobs_trans[0], &dobs[local_is * ng * nt], ng, nt);
 		if(np == 1) {
-			sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
+			sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots_rf);
 		}
 		else {
 			if(rank == 0) {
-				sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots);
+				sf_floatwrite(&dobs[local_is * ng * nt], ng*nt, params.shots_rf);
 				if(is == rank * k + ntask - 1) {
 					for(int other_is = rank * k + ntask ; other_is < ns ; other_is ++) {
 						MPI_Recv(&dobs[0], ng*nt, MPI_FLOAT, other_is / k, other_is, MPI_COMM_WORLD, &status);
-						sf_floatwrite(&dobs[0], ng*nt, params.shots);
+						sf_floatwrite(&dobs[0], ng*nt, params.shots_rf);
 					}
 				}
 			}
