@@ -9,9 +9,9 @@
 export DATAPATH=`pwd`/
 
 allowed_tasks=( \
-  "born" "fm" "cfwi" "essfwi" "enfwi" "noise" \
-  "born-sw" "fm-sw" "cfwi-sw" "essfwi-sw" "enfwi-sw" "noise-sw" \
-  "born-swintel" "fm-swintel" "cfwi-swintel" "essfwi-swintel" "enfwi-swintel" "noise-swintel" \
+  "fti" "born" "fm" "cfwi" "essfwi" "enfwi" "noise" \
+  "fti-sw" "born-sw" "fm-sw" "cfwi-sw" "essfwi-sw" "enfwi-sw" "noise-sw" \
+  "fti-swintel" "born-swintel" "fm-swintel" "cfwi-swintel" "essfwi-swintel" "enfwi-swintel" "noise-swintel" \
   )
 
 # check the parameters#{{{

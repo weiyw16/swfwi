@@ -243,12 +243,12 @@ void ForwardModeling::stepForward(std::vector<float> &p0, std::vector<float> &p1
   static std::vector<float> u2(vel->nx * vel->nz, 0);
 
 	//damp
-  //fd4t10s_damp_zjh_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
+  fd4t10s_damp_zjh_2d_vtrans(p0, p1, &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0);
 	
 	//sponge
-  fd4t10s_nobndry_2d_vtrans(&p0[0], &p1[0], &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0, freeSurface);
-	spng->applySponge(&p0[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
-	spng->applySponge(&p1[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
+  //fd4t10s_nobndry_2d_vtrans(&p0[0], &p1[0], &vel->dat[0], &u2[0], vel->nx, vel->nz, bx0, freeSurface);
+	//spng->applySponge(&p0[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
+	//spng->applySponge(&p1[0], &vel->dat[0], vel->nx, vel->nz, bx0, dt, dx, freeSurface);
 
 	//fdUtil
 	//float **pp0 = f1dto2d(p0, vel->nx, vel->nz);
