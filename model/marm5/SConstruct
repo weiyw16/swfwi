@@ -170,10 +170,10 @@ Flow('vel','marmvel.hh',
   ''')
 #}}}
 # smooth initial model#{{{
-#Flow('smvel', 'vel', '''math output="1/input" |
-#  smooth rect1=25 rect2=60 |
-#  math output="1/input"
-#  ''')
+Flow('smvel', 'vel', '''math output="1/input" |
+  smooth rect1=25 rect2=60 |
+  math output="1/input"
+  ''')
 #}}}
 # plot real/smoothed velocities#{{{
 plotvel('vel', 'Marmousi model')
