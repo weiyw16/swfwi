@@ -323,7 +323,8 @@ void FwiFramework::calgradient(const ForwardModeling &fmMethod,
     fmMethod.stepForward(sp0,sp1);
     //printf("it = %d, forward 2\n", it);
     std::swap(sp1, sp0);
-    //fmMethod.writeBndry(&bndr[0], &sp0[0], it); -test
+    fmMethod.writeBndry(&bndr[0], &sp0[0], it); //-test
+		/*
 		const int check_step = 5;
     if ((it > 0) && (it != (nt - 1)) && !(it % check_step)) {
       char check_file_name1[64];
@@ -337,7 +338,9 @@ void FwiFramework::calgradient(const ForwardModeling &fmMethod,
 			fclose(f1);
 			fclose(f2);
     }
+		*/
   }
+	/*
 	char check_file_name1[64];
 	char check_file_name2[64];
 	sprintf(check_file_name1, "./rank_%d_check_time_last_1.su", rank);
@@ -348,12 +351,14 @@ void FwiFramework::calgradient(const ForwardModeling &fmMethod,
 	fwrite(&sp1[0], sizeof(float), nx * nz, f2);
 	fclose(f1);
 	fclose(f2);
+	*/
 
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
 
   for(int it = nt - 1; it >= 0 ; it--) {
-    //fmMethod.readBndry(&bndr[0], &sp0[0], it);	-test
+    fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
+		/*
 		const int check_step = 5;
 		if(it == nt - 1)
 		{
@@ -380,11 +385,12 @@ void FwiFramework::calgradient(const ForwardModeling &fmMethod,
 			fclose(f1);
 			fclose(f2);
 		}
+		*/
 
-    //std::swap(sp0, sp1); -test
+    std::swap(sp0, sp1); //-test
     fmMethod.stepBackward(&sp0[0], &sp1[0]);
     //fmMethod.subEncodedSource(&sp0[0], &wlt[it]);
-    std::swap(sp0, sp1);	//-test
+    //std::swap(sp0, sp1);	//-test
     fmMethod.subSource(&sp0[0], &wlt[it], curSrcPos);
 
     /**

@@ -20,15 +20,15 @@ std::vector<int> RandomCodes::genPlus1Minus1(int nshots) {
 		exit(1);
 	}
   std::vector<int> codes(nshots);
-	while(true) {
-		int sum = 0;
+	//while(true) {
+		//int sum = 0;
 		for (int i = 0; i < nshots; i++) {
 			codes[i] = nextRand();
-			sum += codes[i];
+			//sum += codes[i];
 		}
-		if(sum == 0)
-			break;
-	}
+		//if(sum == 0)
+			//break;
+	//}
 
   return codes;
 }
