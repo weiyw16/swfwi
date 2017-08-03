@@ -8,13 +8,14 @@ def plotvel(File,title): #{{{
 	Plot(File,'''
 	grey title=%s color=j
 	scalebar=y scalelabel=Velocity scaleunit=m/s
-	''')
+	''' % title )
 #}}}
 def plotspectra(File,title): #{{{
 	Plot(File,'''
 	grey title=%s color=j
 	scalebar=y scalelabel=Amplitude scaleunit=1
-	''')
+	''' % title )
+#}}}
 # creat velocity #{{{
 Flow('vel','',
 '''
