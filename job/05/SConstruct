@@ -37,7 +37,7 @@ Flow('tau','vel',
 Flow('pseuvel',"vel tau",
 '''
 pseudodepth tau=${SOURCES[1]} inv=n linear=y
-n=20  o=0.0  d=0.01
+n=1256  o=0.0  d=0.001
  ''' )
 
 End()
