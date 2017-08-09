@@ -1,0 +1,70 @@
+# get wavenumber using "spectra" from marmousi and its smoothed model
+# weiyw17@gmail.com
+# 2017.8.9
+
+from rsf.proj import *
+
+## programs
+def plotvel(File,title):
+	Plot(File,'''
+	grey title=%s color=j
+	scalebar=y
+	''' % title)
+
+def plotspectra(File,title):
+	Plot(File,'''
+	grey title=%s color=j
+	scalebar=y 
+	''' % title)
+
+## workflow
+# get marmousi model
+Fetch('marmvel.hh', 'marm', server='local', top='/Users/weiyw/workspace/fwi/swfwi/data')
+
+# subsampling 
+Flow('vel','marmvel.hh',
+'''
+dd form=native |
+window j1=5 j2=5 |
+put label1=Depth label2=Distance unit1=m unit2=m
+ ''')
+
+# spectra-math
+Flow('vel_spectra_math','vel',
+'''
+spectra all=n |
+math output=1.0/input 
+ ''')
+# spectra
+Flow('vel_spectra','vel',
+'''
+spectra all=n 
+''')
+
+# marmousi smoothed
+Flow('smvel','vel',
+'''
+smooth rect1=60 rect2=20
+ ''')
+
+# spectra-math for smoothed marmousi model
+Flow('smvel_spectra_math','smvel',
+'''
+spectra all=n |
+math output=1.0/input 
+ ''')
+# spectra for smoothed marmousi model
+Flow('smvel_spectra','smvel',
+'''
+spectra all=n 
+ ''')
+
+# plot
+plotvel('vel',"Marmousi velocity")
+plotvel('smvel',"smoothed Marmousi velocity")
+plotspectra('vel_spectra',"origin wavenumber")
+plotspectra('smvel_spectra',"smoothed wavenumber")
+plotspectra('vel_spectra_math',"origin wavenumber_math")
+plotspectra('smvel_spectra_math',"smoothed wavenumber_math")
+
+
