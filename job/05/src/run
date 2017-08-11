@@ -1,1 +1,0 @@
-cc -o  getTau  getTau.c -I$RSFROOT/include -L$RSFROOT/lib -lrsf -lm
