@@ -45,9 +45,12 @@ FwiFramework::FwiFramework(ForwardModeling &method, const FwiUpdateSteplenOp &up
 }
 
 void FwiFramework::epoch(int iter) {
+
 	std::vector<float> g1(nx * nz, 0);
 	std::vector<float> g2(nx * nz, 0);
 	std::vector<float> encobs(ng * nt, 0);
+	
+	/* source parallel in mpi */
 	int rank, np, k, ntask, shot_begin, shot_end;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
@@ -55,12 +58,13 @@ void FwiFramework::epoch(int iter) {
 	ntask = std::min(k, ns - rank*k);
 	shot_begin = rank * k;
 	shot_end = shot_begin + ntask;
+
 	float local_obj1 = 0.0f, obj1 = 0.0f;
 
 	for(int is = shot_begin ; is < shot_end ; is ++) {
 		std::vector<float> encobs_trans(nt * ng, 0.0f);
 		INFO() << format("calculate gradient, shot id: %d") % is;
-		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);
+		memcpy(&encobs_trans[0], &dobs[is * ng * nt], sizeof(float) * ng * nt);/* copy dobs --> encobs_trans */
 
 		matrix_transpose(&encobs_trans[0], &encobs[0], ng, nt);
 
@@ -82,12 +86,12 @@ void FwiFramework::epoch(int iter) {
 
 		INFO() << "sum encobs: " << std::accumulate(encobs.begin(), encobs.end(), 0.0f);
 		INFO() << wlt[0] << " " << wlt[132];
-		INFO() << "sum wlt: " << std::accumulate(wlt.begin(), wlt.begin() + nt, 0.0f);
+		INFO() << "sum wlt: " << std::accumulate(wlt.begin(), wlt.begin() + nt, 0.0f);// why should add them all ? 
 
 		std::vector<float> dcal(nt * ng, 0);
 		std::vector<float> dcal_trans(ng * nt, 0.0f);
-		fmMethod.FwiForwardModeling(wlt, dcal_trans, is);
-		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);
+		fmMethod.FwiForwardModeling(wlt, dcal_trans, is);// where get fmMethod ??
+		matrix_transpose(&dcal_trans[0], &dcal[0], ng, nt);//common.cpp
 
 
 		/*
@@ -140,7 +144,7 @@ void FwiFramework::epoch(int iter) {
 		INFO() << "sum dcal2: " << std::accumulate(dcal.begin(), dcal.end(), 0.0f);
 
 		std::vector<float> vsrc(nt * ng, 0);
-		vectorMinus(encobs, dcal, vsrc);
+		vectorMinus(encobs, dcal, vsrc);// common.h
 		local_obj1 += cal_objective(&vsrc[0], vsrc.size());
 		initobj = iter == 0 ? local_obj1 : initobj;
 		//DEBUG() << format("obj: %e") % obj1;
@@ -184,7 +188,7 @@ void FwiFramework::epoch(int iter) {
 			 fclose(f);
 			 */
 
-		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());
+		std::transform(g2.begin(), g2.end(), g1.begin(), g2.begin(), std::plus<float>());//g2 + g1 ??
 
 		/*
 			 sf_file sf_g2 = sf_output("g2.rsf");
@@ -200,7 +204,8 @@ void FwiFramework::epoch(int iter) {
 	g1.assign(nx * nz, 0.0f);
 	MPI_Allreduce(&g2[0], &g1[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 	MPI_Allreduce(&local_obj1, &obj1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
-
+	/* int MPI_Allreduce(const void *sendbuf, void *recvbuf, int count,
+	                  MPI_Datatype datatype, MPI_Op op, MPI_Comm comm) */
 	if(rank == 0)
 	{
 		DEBUG() << format("****** global grad %.20f") % sum(g1);
