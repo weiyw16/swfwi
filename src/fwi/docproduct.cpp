@@ -59,6 +59,7 @@ void FwiFrameDoc::epoch(int iter) {
 	ntask = std::min(k, ns - rank*k);
 	shot_begin = rank * k;
 	shot_end = shot_begin + ntask;
+	sf_file sfdelm = sf_output("m2.rsf");
 
 	float local_obj1 = 0.0f, obj1 = 0.0f;
 
@@ -152,7 +153,16 @@ void FwiFrameDoc::epoch(int iter) {
 		INFO() << "obj: " << local_obj1 << "\n";
 
 		transVsrc(vsrc, nt, ng);
-
+		if(iter == 1)
+		 {
+			 sf_file sf_d2 = sf_output("d2.rsf");
+			 sf_putint(sf_d2, "n1", nt);
+			 sf_putint(sf_d2, "n2", ng);
+			 sf_floatwrite(&vsrc[0], nt * ng, sf_d2);
+			 exit(1);
+		 }
+		//在此处输出vsrc，作为d2
+		//sf_floatwrite(&vsrc[0], nt*ng, );		
 		INFO() << "sum vsrc: " << std::accumulate(vsrc.begin(), vsrc.end(), 0.0f);
 
 		g1.assign(nx * nz, 0.0f);
@@ -201,7 +211,8 @@ void FwiFrameDoc::epoch(int iter) {
 
 		DEBUG() << format("global grad %.20f") % sum(g2);
 	}
-
+	//	shot iteration end.
+	
 	g1.assign(nx * nz, 0.0f);
 	MPI_Allreduce(&g2[0], &g1[0], g2.size(), MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 	MPI_Allreduce(&local_obj1, &obj1, 1, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
@@ -262,6 +273,10 @@ void FwiFrameDoc::epoch(int iter) {
 	}
 
 	Velocity &exvel = fmMethod.getVelocity();
+	//Velocity &nyvel = fmMethod.getVelocity();
+	Velocity &nyvel;
+	//Velocity &devel = fmMethod.getVelocity();
+	Velocity &devel;
 
 	/*
 		 if(iter == 1)
@@ -277,7 +292,9 @@ void FwiFrameDoc::epoch(int iter) {
 	if(rank == 0)
 		INFO() << format("sum vel %f") % sum(exvel.dat);
 
-	updateVelOp.update(exvel, exvel, updateDirection, steplen);
+	updateVelOp.update(nyvel, exvel, updateDirection, steplen);
+	vectorMinus(nyvel, exvel, devel); 
+	sfWriteVel(devel,sfdelm);
 
 	if(rank == 0)
 		INFO() << format("sum vel2 %f") % sum(exvel.dat);
@@ -322,7 +339,7 @@ void FwiFrameDoc::calgradient(const ForwardModeling &fmMethod,
 
 
   ShotPosition curSrcPos = allSrcPos.clipRange(shot_id, shot_id);
-
+  // forward begin
   for(int it=0; it<nt; it++) {
     fmMethod.addSource(&sp1[0], &wlt[it], curSrcPos);
     //printf("it = %d, forward 1\n", it);
@@ -345,7 +362,7 @@ void FwiFrameDoc::calgradient(const ForwardModeling &fmMethod,
 			fclose(f2);
     }
 		*/
-  }
+  }//forward end
 	/*
 	char check_file_name1[64];
 	char check_file_name2[64];
@@ -361,7 +378,7 @@ void FwiFrameDoc::calgradient(const ForwardModeling &fmMethod,
 
   std::vector<float> vsrc_trans(ng * nt, 0.0f);
   matrix_transpose(const_cast<float*>(&vsrc[0]), &vsrc_trans[0], nt, ng);
-
+  // backawrd begin
   for(int it = nt - 1; it >= 0 ; it--) {
     fmMethod.readBndry(&bndr[0], &sp0[0], it);	//-test
 		/*
@@ -420,6 +437,6 @@ void FwiFrameDoc::calgradient(const ForwardModeling &fmMethod,
       //printf("it = %d, cross 5\n");
       break;
     }
- }
+ }// backward end
 }
 

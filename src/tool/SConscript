@@ -11,6 +11,7 @@ bin_list = [
 ("test", "main-test.cpp"),
 ("fm-damp", "main-fm-damp.cpp"),
 ("born", "main-born.cpp"),
+("dotpt", "main-docproduct.cpp"),
            ]
 
 modules = """

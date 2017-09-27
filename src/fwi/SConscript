@@ -12,6 +12,7 @@ fwiframework.cpp
 ftiframework.cpp
 fwiupdatevelop.cpp
 fwiupdatesteplenop.cpp
+docproduct.cpp
           """.split()
 
 include_dir = [
